@@ -1,0 +1,27 @@
+[project]
+name = "pushhdc"
+version = "0.1.0"
+description = "Evolving HDC encoders with genetic programming"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Luke Wang", email = "lukewang74@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=9",
+    "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest]
+addopts = ["-ra"]
+strict = true
+testpaths = ["tests"]

@@ -1,0 +1,50 @@
+# Ruff config: https://docs.astral.sh/ruff/settings/
+# target-version is inferred from `requires-python` in pyproject.toml.
+
+line-length = 80
+indent-width = 4
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+
+[lint]
+select = [
+    "F",    # pyflakes: unused imports/variables, undefined names
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "I",    # isort: import sorting
+    "UP",   # pyupgrade: use modern syntax for the target Python
+    "B",    # flake8-bugbear: likely bugs and design problems
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "RET",  # flake8-return
+    "PIE",  # flake8-pie: misc. lints
+    "ARG",  # flake8-unused-arguments
+    "PTH",  # flake8-use-pathlib: prefer pathlib over os.path
+    "PT",   # flake8-pytest-style
+    "T20",  # flake8-print: no print() in library code
+    "ISC",  # flake8-implicit-str-concat
+    "LOG",  # flake8-logging
+    "G",    # flake8-logging-format
+    "PGH",  # pygrep-hooks: no blanket `noqa` / `type: ignore`
+    "PL",   # pylint
+    "PERF", # perflint: performance anti-patterns
+    "FURB", # refurb: modernization
+    "NPY",  # numpy-specific rules
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",    # line too long: the formatter handles line length
+    "PLR09",   # too-many-{arguments,branches,locals,statements,...}
+    "PLR2004", # magic value comparison
+]
+
+[lint.per-file-ignores]
+"tests/**" = [
+    "ARG", # unused arguments are normal for pytest fixtures
+    "T20", # print() is fine in tests
+]
