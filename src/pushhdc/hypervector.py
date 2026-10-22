@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 
 
@@ -19,14 +21,14 @@ class HyperVector:
             # Initialize with random bipolar values: {-1, +1}
             self.data = np.choice([-1.0, 1.0], size=(dimension,)).astype(
                 np.float32
-            )  # noqa: E501
+            )
 
     @classmethod
     def random(cls, dimension: int = 10000) -> "HyperVector":
-        """
-        Generate a new orthogonal random bipolar hypervector.
-        """
-        raw_data = np.random.choice([-1.0, 1.0], size=(dimension,))
+        """Generate a new orthogonal random bipolar hypervector."""
+        rng = np.random.default_rng()
+        choices = np.array([-1.0, 1.0], dtype=np.float32)
+        raw_data = rng.choice(choices, size=(dimension,))
         return cls(data=raw_data, dimension=dimension)
 
     def bind(self, other: "HyperVector") -> "HyperVector":
@@ -37,7 +39,7 @@ class HyperVector:
         if self.dimension != other.dimension:
             raise ValueError(
                 "Hypervectors must have the same dimension to bind."
-            )  # noqa: E501
+            )
 
         bound_data = self.data * other.data
         return HyperVector(data=bound_data, dimension=self.dimension)
@@ -48,7 +50,9 @@ class HyperVector:
         to store sets or sequences, binarizing back to bipolar {-1, +1}.
         """
         if self.dimension != other.dimension:
-            raise ValueError("Hypervectors must have the same dimension to bundle.")  # noqa: E501
+            raise ValueError(
+                "Hypervectors must have the same dimension to bundle."
+            )
 
         summed_data = self.data + other.data
         # Thresholding back to bipolar space {-1, +1}
@@ -79,6 +83,7 @@ class HyperVector:
 
 
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
     # Test execution
     dim = 10000
     hv1 = HyperVector.random(dimension=dim)
@@ -86,16 +91,18 @@ if __name__ == "__main__":
 
     # Test Binding
     bound_hv = hv1.bind(hv2)
-    print(
-        f"Bound similarity to original (should be near 0): {bound_hv.cosine_similarity(hv1):.4f}"  # noqa: E501
+    logger.info(
+        "Bound similarity (should be near 0): %.4f",
+        bound_hv.cosine_similarity(hv1),
     )
 
     # Test Bundling
     set_hv = hv1.bundle(hv2)
-    print(f"Bundle similarity to hv1: {set_hv.cosine_similarity(hv1):.4f}")
+    logger.info("Bundle similarity: %.4f", set_hv.cosine_similarity(hv1))
 
     # Test Permutation
     perm_hv = hv1.permute(shift=1)
-    print(
-        f"Permuted similarity to original (should be near 0): {perm_hv.cosine_similarity(hv1):.4f}"  # noqa: E501
+    logger.info(
+        "Permuted similarity (should be near 0): %.4f",
+        perm_hv.cosine_similarity(hv1),
     )
