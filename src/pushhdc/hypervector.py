@@ -17,11 +17,9 @@ class HyperVector:
             self.data: np.ndarray = data.astype(np.float32)
             self.dimension: int = self.data.shape[0]
         else:
-            self.dimension = dimension
-            # Initialize with random bipolar values: {-1, +1}
-            self.data = np.choice([-1.0, 1.0], size=(dimension,)).astype(
-                np.float32
-            )
+            random_hv = self.random(dimension=dimension)
+            self.data = random_hv.data
+            self.dimension = random_hv.dimension
 
     @classmethod
     def random(cls, dimension: int = 10000) -> "HyperVector":
@@ -46,8 +44,8 @@ class HyperVector:
 
     def bundle(self, other: "HyperVector") -> "HyperVector":
         """
-        Performs Bundling (superposition/addition)
-        to store sets or sequences, binarizing back to bipolar {-1, +1}.
+        Bundles this hypervector with another using superposition (element-wise addition),
+        thresholding, and random tie-breaking for exact zeros.
         """
         if self.dimension != other.dimension:
             raise ValueError(
@@ -55,9 +53,19 @@ class HyperVector:
             )
 
         summed_data = self.data + other.data
-        # Thresholding back to bipolar space {-1, +1}
-        bundled_data = np.where(summed_data >= 0.0, 1.0, -1.0)
-        return HyperVector(data=bundled_data, dimension=self.dimension)
+
+        # 1. Base mapping: strictly positive sums -> 1.0, non-positive sums -> -1.0
+        bundled_data = np.where(summed_data > 0.0, 1.0, -1.0)
+
+        # 2. Handle exact zeros (ties) where sum == 0.0
+        zeros = summed_data == 0.0
+        if np.any(zeros):
+            num_zeros = np.count_nonzero(zeros)
+            # Efficient binary random choice: maps {0, 1} to {-1.0, 1.0}
+            rng = np.random.default_rng()
+            bundled_data[zeros] = rng.choice([-1.0, 1.0], size=num_zeros)
+
+        return HyperVector(bundled_data)
 
     def permute(self, shift: int = 1) -> "HyperVector":
         """Performs Permutation (cyclic shift) to encode sequence order."""

@@ -10,7 +10,7 @@ uv run pytest -m "not slow"  # skip slow evolution tests
 uv run ruff check            # lint
 uv run ruff format           # format
 uv run mypy                  # type check
-uv build                     # build sdist + wheuv pip show pyshgpel into dist/
+uv build                     # build sdist + wheel into dist/
 ```
 
 #### Setup / Updating
