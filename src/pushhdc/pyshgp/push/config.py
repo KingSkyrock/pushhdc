@@ -8,7 +8,7 @@ A block of Push code can produce different behavior under different ``PushConfig
 the ``PushConfig`` used to produce a solution program must be a part of the definition of a push ``Program``.
 
 """
-from collections import Sequence
+from collections.abc import Sequence
 from typing import Union
 
 from pyrsistent import PRecord, field

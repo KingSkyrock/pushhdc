@@ -10,11 +10,11 @@ import math
 
 from numpy.random import random, choice
 
-from pyshgp.push.types import PushType
-from pyshgp.push.atoms import Literal
-from pyshgp.gp.genome import Genome, GeneSpawner
-from pyshgp.tap import tap
-from pyshgp.utils import DiscreteProbDistrib, instantiate_using
+from pushhdc.pyshgp.push.types import PushType
+from pushhdc.pyshgp.push.atoms import Literal
+from pushhdc.pyshgp.gp.genome import Genome, GeneSpawner
+from pushhdc.pyshgp.tap import tap
+from pushhdc.pyshgp.utils import DiscreteProbDistrib, instantiate_using
 
 
 class VariationOperator(ABC):

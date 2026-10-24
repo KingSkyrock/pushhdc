@@ -1,7 +1,7 @@
-from pyshgp.push.interpreter import PushInterpreter
-from pyshgp.push.instruction_set import InstructionSet
-from pyshgp.gp.genome import genome_to_code
-from tests.support import load_code, load_genome
+from pushhdc.pyshgp.push.interpreter import PushInterpreter
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.gp.genome import genome_to_code
+from tests.pyshgp.support import load_code, load_genome
 
 
 def check_translation(program_name: str, interpreter: PushInterpreter):

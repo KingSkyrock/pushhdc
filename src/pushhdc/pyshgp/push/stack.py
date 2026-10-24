@@ -5,10 +5,10 @@ A ``PushStack`` is used to hold values of a certain ``PushType`` in a ``PushStat
 """
 from typing import Optional, List
 
-from pyshgp.push.config import constrain_collection, constrain_number, PushConfig
-from pyshgp.push.types import PushType
-from pyshgp.utils import Token
-from pyshgp.validation import PushError
+from pushhdc.pyshgp.push.config import constrain_collection, constrain_number, PushConfig
+from pushhdc.pyshgp.push.types import PushType
+from pushhdc.pyshgp.utils import Token
+from pushhdc.pyshgp.validation import PushError
 
 
 class PushStack(List):

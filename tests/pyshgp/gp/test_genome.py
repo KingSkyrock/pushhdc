@@ -1,10 +1,10 @@
 import pytest
 from pyrsistent import InvariantException
 
-from pyshgp.gp.genome import Opener, _has_opener, genome_to_code, Genome, GenomeSimplifier
-from pyshgp.gp.evaluation import DatasetEvaluator
-from pyshgp.push.atoms import Atom, Literal, InstructionMeta, CodeBlock
-from pyshgp.push.types import PushInt, PushBool
+from pushhdc.pyshgp.gp.genome import Opener, _has_opener, genome_to_code, Genome, GenomeSimplifier
+from pushhdc.pyshgp.gp.evaluation import DatasetEvaluator
+from pushhdc.pyshgp.push.atoms import Atom, Literal, InstructionMeta, CodeBlock
+from pushhdc.pyshgp.push.types import PushInt, PushBool
 
 
 def test_opener():

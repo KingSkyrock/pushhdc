@@ -1,16 +1,16 @@
 """Definitions for all core code instructions."""
 from typing import Tuple, Union
 
-from pyshgp.push.type_library import PushTypeLibrary
-from pyshgp.push.types import PushInt
-from pyshgp.push.instruction import (
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.types import PushInt
+from pushhdc.pyshgp.push.instruction import (
     SimpleInstruction,
     StateToStateInstruction
 )
-from pyshgp.push.instructions.common import _revert, _wrap_tuple, _dup
-from pyshgp.push.atoms import Atom, InstructionMeta, CodeBlock, Literal
-from pyshgp.push.state import PushState
-from pyshgp.utils import Token
+from pushhdc.pyshgp.push.instructions.common import _revert, _wrap_tuple, _dup
+from pushhdc.pyshgp.push.atoms import Atom, InstructionMeta, CodeBlock, Literal
+from pushhdc.pyshgp.push.state import PushState
+from pushhdc.pyshgp.utils import Token
 
 
 def _is_code_block(x) -> Tuple[bool]:

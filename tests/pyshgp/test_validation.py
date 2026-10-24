@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
-from pyshgp.validation import check_1d, check_2d, check_column_types, check_num_columns
+from pushhdc.pyshgp.validation import check_1d, check_2d, check_column_types, check_num_columns
 
 
 def test_check_1d_on_1d():
@@ -58,9 +58,9 @@ def test_check_column_types():
         "s": ["a", "b", "c", "d", "e"]
     })
     df_col_types = check_column_types(df, 1.0)
-    assert df_col_types == [np.int64, np.object_] or \
-           df_col_types == [np.int32, np.object_] or \
-           df_col_types == [np.int16, np.object_]
+    # pandas 3 infers a `str` dtype for string columns instead of `object`.
+    assert df_col_types[0] in (np.int64, np.int32, np.int16)
+    assert df_col_types[1] in (np.object_, str)
 
 
 def test_check_num_columns_a():

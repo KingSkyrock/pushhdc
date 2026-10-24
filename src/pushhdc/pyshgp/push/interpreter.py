@@ -4,14 +4,14 @@ from typing import Union
 import time
 from enum import Enum
 
-from pyshgp.push.instruction import Instruction
-from pyshgp.push.program import Program
-from pyshgp.push.state import PushState
-from pyshgp.push.instruction_set import InstructionSet
-from pyshgp.push.atoms import Atom, Closer, Literal, InstructionMeta, CodeBlock, Input
-from pyshgp.push.config import PushConfig
-from pyshgp.tap import tap
-from pyshgp.validation import PushError
+from pushhdc.pyshgp.push.instruction import Instruction
+from pushhdc.pyshgp.push.program import Program
+from pushhdc.pyshgp.push.state import PushState
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.push.atoms import Atom, Closer, Literal, InstructionMeta, CodeBlock, Input
+from pushhdc.pyshgp.push.config import PushConfig
+from pushhdc.pyshgp.tap import tap
+from pushhdc.pyshgp.validation import PushError
 
 
 class PushInterpreterStatus(Enum):

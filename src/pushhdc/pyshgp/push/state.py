@@ -7,12 +7,12 @@ manipulation, and the producing of outputs after program execution.
 from typing import Sequence, Union
 from collections import deque
 import numpy as np
-from pyshgp.push.config import PushConfig
+from pushhdc.pyshgp.push.config import PushConfig
 
-from pyshgp.push.type_library import PushTypeLibrary
-from pyshgp.push.atoms import CodeBlock
-from pyshgp.push.stack import PushStack
-from pyshgp.utils import Token
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.atoms import CodeBlock
+from pushhdc.pyshgp.push.stack import PushStack
+from pushhdc.pyshgp.utils import Token
 
 
 class PushState(dict):

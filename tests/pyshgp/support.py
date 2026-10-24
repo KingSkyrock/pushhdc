@@ -1,10 +1,10 @@
 import json
 
-from pyshgp.gp.genome import Genome
-from pyshgp.push.atoms import CodeBlock, Closer, Literal, InstructionMeta, Input
-from pyshgp.push.instruction_set import InstructionSet
-from pyshgp.push.interpreter import PushInterpreter
-from pyshgp.push.program import ProgramSignature, Program
+from pushhdc.pyshgp.gp.genome import Genome
+from pushhdc.pyshgp.push.atoms import CodeBlock, Closer, Literal, InstructionMeta, Input
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.push.interpreter import PushInterpreter
+from pushhdc.pyshgp.push.program import ProgramSignature, Program
 
 
 def _deserialize_atoms(lst, instr_set: InstructionSet):
@@ -34,7 +34,7 @@ def _deserialize_atoms(lst, instr_set: InstructionSet):
 
 
 def load_code(name, interpreter) -> CodeBlock:
-    with open("tests/resources/programs/" + name + ".json") as f:
+    with open("tests/pyshgp/resources/programs/" + name + ".json") as f:
         atoms = _deserialize_atoms(json.load(f), interpreter.instruction_set)
         return CodeBlock(atoms)
 
@@ -45,6 +45,6 @@ def get_program(name: str, sig: ProgramSignature, interpreter: PushInterpreter):
 
 
 def load_genome(name, interpreter) -> Genome:
-    with open("tests/resources/genomes/" + name + ".json") as f:
+    with open("tests/pyshgp/resources/genomes/" + name + ".json") as f:
         atoms = _deserialize_atoms(json.load(f), interpreter.instruction_set)
         return Genome(atoms)

@@ -1,9 +1,9 @@
 """A PushTypeLibrary describes the PushTypes which a given instance of PushGP will support."""
 from typing import Any, Sequence, Tuple, Optional, Set, Callable
 
-from pyshgp.push.types import PushType, CORE_PUSH_TYPES
-from pyshgp.push.atoms import Atom, Literal
-from pyshgp.validation import PushError
+from pushhdc.pyshgp.push.types import PushType, CORE_PUSH_TYPES
+from pushhdc.pyshgp.push.atoms import Atom, Literal
+from pushhdc.pyshgp.validation import PushError
 
 
 RESERVED_PSEUDO_STACKS = {"untyped", "stdout"}

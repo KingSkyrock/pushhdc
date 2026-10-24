@@ -2,11 +2,11 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Set, Sequence
 
-from pyshgp.push.atoms import InstructionMeta
-from pyshgp.push.config import PushConfig
-from pyshgp.push.type_library import RESERVED_PSEUDO_STACKS
-from pyshgp.push.state import PushState
-from pyshgp.utils import Token
+from pushhdc.pyshgp.push.atoms import InstructionMeta
+from pushhdc.pyshgp.push.config import PushConfig
+from pushhdc.pyshgp.push.type_library import RESERVED_PSEUDO_STACKS
+from pushhdc.pyshgp.push.state import PushState
+from pushhdc.pyshgp.utils import Token
 
 
 class Instruction(ABC):

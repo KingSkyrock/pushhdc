@@ -1,9 +1,9 @@
 import pytest
 import numpy as np
 
-from pyshgp.gp.individual import Individual
-from pyshgp.gp.genome import Genome
-from pyshgp.push.interpreter import Program
+from pushhdc.pyshgp.gp.individual import Individual
+from pushhdc.pyshgp.gp.genome import Genome
+from pushhdc.pyshgp.push.interpreter import Program
 
 
 @pytest.fixture(scope="function")

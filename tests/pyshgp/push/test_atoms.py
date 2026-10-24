@@ -1,7 +1,7 @@
 import pytest
 
-from pyshgp.push.atoms import CodeBlock, Literal
-from pyshgp.push.types import PushStr
+from pushhdc.pyshgp.push.atoms import CodeBlock, Literal
+from pushhdc.pyshgp.push.types import PushStr
 
 
 class TestCodeBlock:

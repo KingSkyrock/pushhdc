@@ -1,8 +1,8 @@
 import pytest
 import numpy as np
 
-from pyshgp.push.types import PushType, PushInt, PushStr, Char
-from pyshgp.validation import PushError
+from pushhdc.pyshgp.push.types import PushType, PushInt, PushStr, Char
+from pushhdc.pyshgp.validation import PushError
 
 
 class TestPushType:

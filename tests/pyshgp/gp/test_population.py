@@ -1,11 +1,11 @@
 import pytest
 import numpy as np
 
-from pyshgp.gp.population import Population
-from pyshgp.gp.individual import Individual
-from pyshgp.gp.genome import Genome
-from pyshgp.gp.evaluation import DatasetEvaluator
-from pyshgp.push.program import ProgramSignature
+from pushhdc.pyshgp.gp.population import Population
+from pushhdc.pyshgp.gp.individual import Individual
+from pushhdc.pyshgp.gp.genome import Genome
+from pushhdc.pyshgp.gp.evaluation import DatasetEvaluator
+from pushhdc.pyshgp.push.program import ProgramSignature
 
 
 @pytest.fixture(scope="function")

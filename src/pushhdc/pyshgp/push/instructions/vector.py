@@ -3,16 +3,16 @@ from typing import Tuple, Union, List
 from functools import partial
 from pyrsistent import PVector, pvector
 
-from pyshgp.push.type_library import PushTypeLibrary
-from pyshgp.push.atoms import InstructionMeta, Literal
-from pyshgp.push.state import PushState
-from pyshgp.push.types import CORE_VECTOR_PUSH_TYPES, PushType
-from pyshgp.push.instruction import (
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.atoms import InstructionMeta, Literal
+from pushhdc.pyshgp.push.state import PushState
+from pushhdc.pyshgp.push.types import CORE_VECTOR_PUSH_TYPES, PushType
+from pushhdc.pyshgp.push.instruction import (
     SimpleInstruction,
     StateToStateInstruction,
     ProducesManyOfTypeInstruction, Instruction
 )
-from pyshgp.utils import Token
+from pushhdc.pyshgp.utils import Token
 
 
 def concat(v1: PVector, v2: PVector) -> Tuple[PVector]:

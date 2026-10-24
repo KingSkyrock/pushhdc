@@ -2,18 +2,18 @@ import pytest
 import random
 from math import pow, sqrt
 
-from pyshgp.gp.individual import Individual
+from pushhdc.pyshgp.gp.individual import Individual
 
-from pyshgp.push.config import PushConfig
-from pyshgp.push.type_library import PushTypeLibrary
-from pyshgp.push.types import PushInt, PushBool, PushFloat, PushStr, PushType
-from pyshgp.push.instruction_set import InstructionSet
-from pyshgp.push.instruction import SimpleInstruction
-from pyshgp.push.atoms import Closer, Literal
-from pyshgp.push.interpreter import PushInterpreter
-from pyshgp.push.program import ProgramSignature, Program
-from pyshgp.push.state import PushState
-from pyshgp.gp.genome import Genome, GeneSpawner, genome_to_code
+from pushhdc.pyshgp.push.config import PushConfig
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.types import PushInt, PushBool, PushFloat, PushStr, PushType
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.push.instruction import SimpleInstruction
+from pushhdc.pyshgp.push.atoms import Closer, Literal
+from pushhdc.pyshgp.push.interpreter import PushInterpreter
+from pushhdc.pyshgp.push.program import ProgramSignature, Program
+from pushhdc.pyshgp.push.state import PushState
+from pushhdc.pyshgp.gp.genome import Genome, GeneSpawner, genome_to_code
 
 
 @pytest.fixture(scope="session")

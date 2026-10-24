@@ -1,8 +1,8 @@
-from pyshgp.push.config import PushConfig
-from pyshgp.push.instruction_set import InstructionSet
-from pyshgp.push.interpreter import PushInterpreter
-from pyshgp.push.program import ProgramSignature
-from tests.support import get_program
+from pushhdc.pyshgp.push.config import PushConfig
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.push.interpreter import PushInterpreter
+from pushhdc.pyshgp.push.program import ProgramSignature
+from tests.pyshgp.support import get_program
 
 
 class TestPrettyString:

@@ -1,19 +1,19 @@
 """The :mod:`estimator` module defines a ``PushEstimator`` class."""
 from typing import Union, Tuple
 
-from pyshgp.gp.individual import Individual
+from pushhdc.pyshgp.gp.individual import Individual
 
-import pyshgp.gp.search as sr
-import pyshgp.gp.selection as sl
-import pyshgp.gp.variation as vr
-from pyshgp.gp.evaluation import DatasetEvaluator
-from pyshgp.gp.genome import GeneSpawner
-from pyshgp.push.interpreter import PushInterpreter
-from pyshgp.push.config import PushConfig
-from pyshgp.push.program import ProgramSignature
-from pyshgp.tap import tap, set_verbosity
-from pyshgp.utils import list_rindex
-from pyshgp.validation import check_is_fitted, check_X_y
+import pushhdc.pyshgp.gp.search as sr
+import pushhdc.pyshgp.gp.selection as sl
+import pushhdc.pyshgp.gp.variation as vr
+from pushhdc.pyshgp.gp.evaluation import DatasetEvaluator
+from pushhdc.pyshgp.gp.genome import GeneSpawner
+from pushhdc.pyshgp.push.interpreter import PushInterpreter
+from pushhdc.pyshgp.push.config import PushConfig
+from pushhdc.pyshgp.push.program import ProgramSignature
+from pushhdc.pyshgp.tap import tap, set_verbosity
+from pushhdc.pyshgp.utils import list_rindex
+from pushhdc.pyshgp.validation import check_is_fitted, check_X_y
 
 
 class PushEstimator:

@@ -1,7 +1,7 @@
-from pyshgp.push.atoms import Input
-from pyshgp.push.interpreter import PushInterpreter
-from pyshgp.push.state import PushState
-from tests.push.instruction_test_specs import SPECS
+from pushhdc.pyshgp.push.atoms import Input
+from pushhdc.pyshgp.push.interpreter import PushInterpreter
+from pushhdc.pyshgp.push.state import PushState
+from tests.pyshgp.push.instruction_test_specs import SPECS
 
 
 def test_instructions(core_type_lib, push_config):

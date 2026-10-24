@@ -7,10 +7,10 @@ from operator import attrgetter
 import numpy as np
 from numpy.random import random, choice, shuffle
 
-from pyshgp.gp.individual import Individual
-from pyshgp.gp.population import Population
-from pyshgp.tap import tap
-from pyshgp.utils import instantiate_using
+from pushhdc.pyshgp.gp.individual import Individual
+from pushhdc.pyshgp.gp.population import Population
+from pushhdc.pyshgp.tap import tap
+from pushhdc.pyshgp.utils import instantiate_using
 
 
 class Selector(ABC):

@@ -1,6 +1,6 @@
 """Definitions for all core I/O instructions, including input instructions."""
-from pyshgp.push.instruction import SimpleInstruction
-from pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.instruction import SimpleInstruction
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
 
 
 # Printing instructions

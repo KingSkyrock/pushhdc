@@ -1,7 +1,7 @@
 import pytest
 
-from pyshgp.gp.search import SearchConfiguration
-from pyshgp.gp.evaluation import DatasetEvaluator
+from pushhdc.pyshgp.gp.search import SearchConfiguration
+from pushhdc.pyshgp.gp.evaluation import DatasetEvaluator
 
 
 @pytest.fixture(scope="session")

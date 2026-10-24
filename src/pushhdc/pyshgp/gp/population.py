@@ -6,9 +6,9 @@ import pickle
 from multiprocessing import Pool
 from functools import partial
 
-from pyshgp.gp.individual import Individual
-from pyshgp.gp.evaluation import Evaluator
-from pyshgp.tap import tap
+from pushhdc.pyshgp.gp.individual import Individual
+from pushhdc.pyshgp.gp.evaluation import Evaluator
+from pushhdc.pyshgp.tap import tap
 
 
 def _eval_indiv(indiv: Individual, evalr: Evaluator, ):

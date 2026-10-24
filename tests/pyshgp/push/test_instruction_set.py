@@ -1,8 +1,8 @@
 import pytest
 from itertools import chain
 
-from pyshgp.push.instruction_set import InstructionSet
-from pyshgp.push.instructions import common, numeric, text, code, io, logical, vector
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.push.instructions import common, numeric, text, code, io, logical, vector
 
 
 @pytest.fixture(scope="function")

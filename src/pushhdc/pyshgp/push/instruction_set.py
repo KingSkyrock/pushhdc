@@ -6,9 +6,9 @@ InstructionSet has methods to help define and register additional instructions.
 from typing import Sequence, Set, Dict
 import re
 
-from pyshgp.push.type_library import PushTypeLibrary, RESERVED_PSEUDO_STACKS
-from pyshgp.push.instruction import Instruction
-from pyshgp.push.instructions import core_instructions
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary, RESERVED_PSEUDO_STACKS
+from pushhdc.pyshgp.push.instruction import Instruction
+from pushhdc.pyshgp.push.instructions import core_instructions
 
 
 class InstructionSet(Dict[str, Instruction]):

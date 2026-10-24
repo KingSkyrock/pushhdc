@@ -22,7 +22,7 @@ from itertools import chain, count
 
 from pyrsistent import PClass, field, CheckedPVector
 
-from pyshgp.push.types import PushType
+from pushhdc.pyshgp.push.types import PushType
 
 
 class Atom:

@@ -2,10 +2,10 @@ import pandas as pd
 import pytest
 import numpy as np
 
-from pyshgp.gp.evaluation import (
+from pushhdc.pyshgp.gp.evaluation import (
     damerau_levenshtein_distance, DatasetEvaluator, FunctionEvaluator
 )
-from pyshgp.utils import Token
+from pushhdc.pyshgp.utils import Token
 
 
 def test_levenshtein_distance_str():

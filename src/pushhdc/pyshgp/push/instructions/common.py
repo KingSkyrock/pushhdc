@@ -2,17 +2,17 @@
 from typing import Any, Tuple
 from functools import partial
 
-from pyshgp.push.types import PushType
-from pyshgp.push.type_library import PushTypeLibrary
-from pyshgp.push.instruction import (
+from pushhdc.pyshgp.push.types import PushType
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.instruction import (
     SimpleInstruction,
     TakesStateInstruction,
     StateToStateInstruction,
     ProducesManyOfTypeInstruction
 )
-from pyshgp.push.state import PushState
-from pyshgp.push.atoms import Atom, Literal
-from pyshgp.utils import Token
+from pushhdc.pyshgp.push.state import PushState
+from pushhdc.pyshgp.push.atoms import Atom, Literal
+from pushhdc.pyshgp.utils import Token
 
 
 DUP_LIMIT = 500  # @todo move `DUP_LIMIT` to PushConfig

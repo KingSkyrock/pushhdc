@@ -9,9 +9,9 @@ from uuid import uuid4
 
 import numpy as np
 
-from pyshgp.gp.genome import Genome, genome_to_code
-from pyshgp.push.program import Program, ProgramSignature
-from pyshgp.utils import Saveable, Copyable
+from pushhdc.pyshgp.gp.genome import Genome, genome_to_code
+from pushhdc.pyshgp.push.program import Program, ProgramSignature
+from pushhdc.pyshgp.utils import Saveable, Copyable
 
 
 class Individual(Saveable, Copyable):

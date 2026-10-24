@@ -1,8 +1,8 @@
 import math
 import sys
 
-from pyshgp.push.atoms import Literal, CodeBlock, InstructionMeta
-from pyshgp.push.types import Char, PushInt, PushStr, BoolVector, IntVector, FloatVector, CharVector, StrVector, \
+from pushhdc.pyshgp.push.atoms import Literal, CodeBlock, InstructionMeta
+from pushhdc.pyshgp.push.types import Char, PushInt, PushStr, BoolVector, IntVector, FloatVector, CharVector, StrVector, \
     PushIntVector
 
 # Shorthand

@@ -397,16 +397,16 @@ def set_verbosity(level: int):
 
     """
     if level > 0:
-        TapManager.register("pyshgp.gp.genome.GenomeSimplifier.simplify", StdOutSimplification())
+        TapManager.register("pushhdc.pyshgp.gp.genome.GenomeSimplifier.simplify", StdOutSimplification())
 
     if level == 1:
-        TapManager.register("pyshgp.gp.search.SearchAlgorithm.step", StdOutSearchStepTap(every_n_steps=5))
-        TapManager.register("pyshgp.gp.search.SearchAlgorithm.run", StdOutRun(pre_print_config=True,
+        TapManager.register("pushhdc.pyshgp.gp.search.SearchAlgorithm.step", StdOutSearchStepTap(every_n_steps=5))
+        TapManager.register("pushhdc.pyshgp.gp.search.SearchAlgorithm.run", StdOutRun(pre_print_config=True,
                                                                               pre_print_atoms=False,
                                                                               post_print_best=False))
     if level > 1:
-        TapManager.register("pyshgp.gp.search.SearchAlgorithm.step", StdOutSearchStepTap(every_n_steps=1))
-        TapManager.register("pyshgp.gp.search.SearchAlgorithm.run", StdOutRun(pre_print_config=True,
+        TapManager.register("pushhdc.pyshgp.gp.search.SearchAlgorithm.step", StdOutSearchStepTap(every_n_steps=1))
+        TapManager.register("pushhdc.pyshgp.gp.search.SearchAlgorithm.run", StdOutRun(pre_print_config=True,
                                                                               pre_print_atoms=True,
                                                                               post_print_best=True))
-        TapManager.register("pyshgp.gp.genome.GenomeSimplifier._step", StdOutSimplificationStep())
+        TapManager.register("pushhdc.pyshgp.gp.genome.GenomeSimplifier._step", StdOutSimplificationStep())

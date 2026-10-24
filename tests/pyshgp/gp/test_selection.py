@@ -1,11 +1,11 @@
 import pytest
 import numpy as np
 
-from pyshgp.gp.selection import FitnessProportionate, Tournament, Lexicase, Elite
-from pyshgp.gp.population import Population
-from pyshgp.gp.individual import Individual
-from pyshgp.gp.genome import Genome
-from pyshgp.push.program import ProgramSignature
+from pushhdc.pyshgp.gp.selection import FitnessProportionate, Tournament, Lexicase, Elite
+from pushhdc.pyshgp.gp.population import Population
+from pushhdc.pyshgp.gp.individual import Individual
+from pushhdc.pyshgp.gp.genome import Genome
+from pushhdc.pyshgp.push.program import ProgramSignature
 
 
 @pytest.fixture(scope="function")

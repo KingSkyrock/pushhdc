@@ -7,16 +7,16 @@ import math
 from functools import partial
 from multiprocessing import Pool, Manager
 
-from pyshgp.push.program import ProgramSignature
-from pyshgp.tap import tap
-from pyshgp.utils import DiscreteProbDistrib
-from pyshgp.gp.evaluation import Evaluator
-from pyshgp.gp.genome import GeneSpawner, GenomeSimplifier
-from pyshgp.gp.individual import Individual
-from pyshgp.gp.population import Population
-from pyshgp.gp.selection import Selector, get_selector
-from pyshgp.gp.variation import VariationOperator, get_variation_operator
-from pyshgp.utils import instantiate_using
+from pushhdc.pyshgp.push.program import ProgramSignature
+from pushhdc.pyshgp.tap import tap
+from pushhdc.pyshgp.utils import DiscreteProbDistrib
+from pushhdc.pyshgp.gp.evaluation import Evaluator
+from pushhdc.pyshgp.gp.genome import GeneSpawner, GenomeSimplifier
+from pushhdc.pyshgp.gp.individual import Individual
+from pushhdc.pyshgp.gp.population import Population
+from pushhdc.pyshgp.gp.selection import Selector, get_selector
+from pushhdc.pyshgp.gp.variation import VariationOperator, get_variation_operator
+from pushhdc.pyshgp.utils import instantiate_using
 
 
 class ParallelContext:

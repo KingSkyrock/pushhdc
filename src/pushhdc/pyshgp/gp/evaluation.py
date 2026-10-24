@@ -5,9 +5,9 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
-from pyshgp.push.interpreter import PushInterpreter, Program
-from pyshgp.tap import tap
-from pyshgp.utils import Token
+from pushhdc.pyshgp.push.interpreter import PushInterpreter, Program
+from pushhdc.pyshgp.tap import tap
+from pushhdc.pyshgp.utils import Token
 
 
 def damerau_levenshtein_distance(a: Union[str, Sequence], b: Union[str, Sequence]) -> int:

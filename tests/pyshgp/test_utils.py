@@ -1,5 +1,5 @@
 import pytest
-from pyshgp.utils import instantiate_using
+from pushhdc.pyshgp.utils import instantiate_using
 
 
 class Pair:

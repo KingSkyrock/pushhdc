@@ -19,13 +19,13 @@ from typing import Sequence, Union, Any, Callable, Tuple
 import numpy as np
 from pyrsistent import PRecord, field, CheckedPVector, l
 
-from pyshgp.gp.evaluation import Evaluator
-from pyshgp.push.instruction_set import InstructionSet
-from pyshgp.push.program import ProgramSignature, Program
-from pyshgp.push.atoms import Atom, CodeBlock, Closer, Literal, InstructionMeta, Input
-from pyshgp.push.type_library import infer_literal
-from pyshgp.tap import tap
-from pyshgp.utils import DiscreteProbDistrib
+from pushhdc.pyshgp.gp.evaluation import Evaluator
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.push.program import ProgramSignature, Program
+from pushhdc.pyshgp.push.atoms import Atom, CodeBlock, Closer, Literal, InstructionMeta, Input
+from pushhdc.pyshgp.push.type_library import infer_literal
+from pushhdc.pyshgp.tap import tap
+from pushhdc.pyshgp.utils import DiscreteProbDistrib
 
 
 class Opener(PRecord):

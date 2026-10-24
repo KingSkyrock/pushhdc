@@ -1,9 +1,9 @@
 """Definitions for all core numeric instructions."""
 import math
 
-from pyshgp.push.type_library import PushTypeLibrary
-from pyshgp.push.instruction import SimpleInstruction
-from pyshgp.utils import Token
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.instruction import SimpleInstruction
+from pushhdc.pyshgp.utils import Token
 
 
 def _add(a, b):

@@ -2,9 +2,9 @@
 from typing import Sequence, Set, List
 from itertools import chain
 
-from pyshgp.push.type_library import PushTypeLibrary
-from pyshgp.push.instruction import Instruction
-from pyshgp.push.instructions import common, numeric, text, code, io, logical, vector
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.instruction import Instruction
+from pushhdc.pyshgp.push.instructions import common, numeric, text, code, io, logical, vector
 
 
 def _supported(instructions: Sequence[Instruction], supported_stacks: Set[str]) -> Sequence[Instruction]:

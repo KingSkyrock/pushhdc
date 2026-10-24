@@ -1,8 +1,8 @@
 """Definitions for all core text instructions."""
-from pyshgp.push.type_library import PushTypeLibrary
-from pyshgp.push.instruction import SimpleInstruction, ProducesManyOfTypeInstruction
-from pyshgp.push.types import Char
-from pyshgp.utils import Token
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.instruction import SimpleInstruction, ProducesManyOfTypeInstruction
+from pushhdc.pyshgp.push.types import Char
+from pushhdc.pyshgp.utils import Token
 
 
 def _concat(a, b):

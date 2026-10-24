@@ -1,9 +1,9 @@
-from pyshgp.push.interpreter import PushInterpreter, PushInterpreterStatus
-from pyshgp.push.config import PushConfig
-from pyshgp.push.program import ProgramSignature, Program
-from pyshgp.push.instruction_set import InstructionSet
-from pyshgp.push.state import PushState
-from tests.support import load_code, get_program
+from pushhdc.pyshgp.push.interpreter import PushInterpreter, PushInterpreterStatus
+from pushhdc.pyshgp.push.config import PushConfig
+from pushhdc.pyshgp.push.program import ProgramSignature, Program
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.push.state import PushState
+from tests.pyshgp.support import load_code, get_program
 
 
 def check_program(name: str, inputs: list, outputs: list, sig: ProgramSignature, iset: InstructionSet) -> PushState:

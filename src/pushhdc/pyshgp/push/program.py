@@ -7,9 +7,9 @@ of instruction definitions. Programs are serializable, and thus can be saved and
 """
 from pyrsistent import PRecord, field
 
-from pyshgp.push.config import PushConfig
-from pyshgp.push.atoms import CodeBlock
-from pyshgp.utils import Saveable
+from pushhdc.pyshgp.push.config import PushConfig
+from pushhdc.pyshgp.push.atoms import CodeBlock
+from pushhdc.pyshgp.utils import Saveable
 
 
 class ProgramSignature(PRecord):

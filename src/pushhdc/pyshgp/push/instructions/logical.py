@@ -2,8 +2,8 @@
 import operator as op
 from typing import Tuple
 
-from pyshgp.push.type_library import PushTypeLibrary
-from pyshgp.push.instruction import SimpleInstruction
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
+from pushhdc.pyshgp.push.instruction import SimpleInstruction
 
 
 def _and(a: bool, b: bool) -> Tuple[bool]:

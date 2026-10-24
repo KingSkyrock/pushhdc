@@ -10,7 +10,7 @@ from typing import List, Sequence, Tuple
 import numpy as np
 from pyrsistent import CheckedPVector
 
-from pyshgp.validation import PushError
+from pushhdc.pyshgp.validation import PushError
 
 
 class Char(str):

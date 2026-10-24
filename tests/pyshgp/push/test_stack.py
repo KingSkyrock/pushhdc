@@ -1,9 +1,9 @@
 import pytest
 
-from pyshgp.push.stack import PushStack
-from pyshgp.push.types import PushInt, PushStr
-from pyshgp.utils import Token
-from pyshgp.validation import PushError
+from pushhdc.pyshgp.push.stack import PushStack
+from pushhdc.pyshgp.push.types import PushInt, PushStr
+from pushhdc.pyshgp.utils import Token
+from pushhdc.pyshgp.validation import PushError
 
 
 @pytest.fixture(scope="function")

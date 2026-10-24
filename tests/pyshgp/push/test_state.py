@@ -1,8 +1,8 @@
 import pytest
 
-from pyshgp.push.atoms import CodeBlock
-from pyshgp.push.state import PushState
-from pyshgp.utils import Token
+from pushhdc.pyshgp.push.atoms import CodeBlock
+from pushhdc.pyshgp.push.state import PushState
+from pushhdc.pyshgp.utils import Token
 
 
 class TestPushState:

@@ -8,12 +8,12 @@ import pytest
 from math import pow, sqrt
 from functools import partial
 
-from pyshgp.gp.individual import Individual
+from pushhdc.pyshgp.gp.individual import Individual
 
-from pyshgp.gp.estimators import PushEstimator
-from pyshgp.gp.genome import GeneSpawner
-from pyshgp.push.interpreter import PushInterpreter
-from pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.gp.estimators import PushEstimator
+from pushhdc.pyshgp.gp.genome import GeneSpawner
+from pushhdc.pyshgp.push.interpreter import PushInterpreter
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
 
 
 @pytest.fixture

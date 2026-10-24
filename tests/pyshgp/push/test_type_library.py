@@ -1,8 +1,8 @@
 import pytest
 
-from pyshgp.push.type_library import PushTypeLibrary, infer_literal
-from pyshgp.push.atoms import Literal
-from pyshgp.push.types import PushChar, PushInt, PushBool, PushStr, Char, CORE_PUSH_TYPES
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary, infer_literal
+from pushhdc.pyshgp.push.atoms import Literal
+from pushhdc.pyshgp.push.types import PushChar, PushInt, PushBool, PushStr, Char, CORE_PUSH_TYPES
 
 
 ALL_CORE_TYPE_NAMES = set([t.name for t in CORE_PUSH_TYPES]) | {"exec", "code"}

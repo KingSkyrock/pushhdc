@@ -4,14 +4,15 @@ version = "0.1.0"
 description = "Evolving HDC encoders with genetic programming"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "src/pushhdc/pyshgp/LICENSE"]
 authors = [
     { name = "Luke Wang", email = "lukewang74@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.5",
-    "pyshgp>=0.1.8",
+    "pandas>=3.1.0",
+    "pyrsistent>=0.20.0",
 ]
 
 [dependency-groups]
@@ -36,3 +37,8 @@ markers = [
 [tool.mypy]
 strict = true
 files = ["src", "tests"]
+exclude = ["^src/pushhdc/pyshgp/", "^tests/pyshgp/"]
+
+[[tool.mypy.overrides]]
+module = ["pushhdc.pyshgp.*"]
+follow_imports = "skip"
