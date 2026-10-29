@@ -4,7 +4,6 @@ from bisect import insort_left
 import numpy as np
 import pickle
 from multiprocessing import Pool
-from functools import partial
 
 from pushhdc.pyshgp.gp.individual import Individual
 from pushhdc.pyshgp.gp.evaluation import Evaluator
@@ -14,6 +13,19 @@ from pushhdc.pyshgp.tap import tap
 def _eval_indiv(indiv: Individual, evalr: Evaluator, ):
     indiv.error_vector = evalr.evaluate(indiv.program)
     return indiv
+
+
+_worker_evaluator = None
+
+
+# pool initializer, gives each worker process the evaluator once
+def _init_worker(evaluator: Evaluator):
+    global _worker_evaluator
+    _worker_evaluator = evaluator
+
+
+def _eval_in_worker(indiv: Individual):
+    return _eval_indiv(indiv, _worker_evaluator)
 
 
 class Population(Sequence):
@@ -54,10 +66,9 @@ class Population(Sequence):
         return self.evaluated[:n]
 
     @tap
-    def p_evaluate(self, evaluator_proxy, pool: Pool):
+    def p_evaluate(self, pool: Pool):
         """Evaluate all unevaluated individuals in the population in parallel."""
-        func = partial(_eval_indiv, evalr=evaluator_proxy)
-        for individual in pool.imap_unordered(func, self.unevaluated):
+        for individual in pool.imap(_eval_in_worker, self.unevaluated):
             insort_left(self.evaluated, individual)
         self.unevaluated = []
 

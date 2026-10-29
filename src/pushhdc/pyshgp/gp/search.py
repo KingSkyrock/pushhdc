@@ -4,8 +4,7 @@ from typing import Union, Tuple, Optional
 
 import numpy as np
 import math
-from functools import partial
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 
 from pushhdc.pyshgp.push.program import ProgramSignature
 from pushhdc.pyshgp.tap import tap
@@ -13,7 +12,7 @@ from pushhdc.pyshgp.utils import DiscreteProbDistrib
 from pushhdc.pyshgp.gp.evaluation import Evaluator
 from pushhdc.pyshgp.gp.genome import GeneSpawner, GenomeSimplifier
 from pushhdc.pyshgp.gp.individual import Individual
-from pushhdc.pyshgp.gp.population import Population
+from pushhdc.pyshgp.gp.population import Population, _init_worker
 from pushhdc.pyshgp.gp.selection import Selector, get_selector
 from pushhdc.pyshgp.gp.variation import VariationOperator, get_variation_operator
 from pushhdc.pyshgp.utils import instantiate_using
@@ -23,22 +22,13 @@ class ParallelContext:
     """Holds the objects needed to coordinate parallelism."""
 
     def __init__(self,
-                 spawner: GeneSpawner,
                  evaluator: Evaluator,
                  n_proc: Optional[int] = None):
-        self.manager = Manager()
-        self.ns = self.manager.Namespace()
-        self.ns.spawner = spawner
-        self.ns.evaluator = evaluator
-        self.pool = None
-        if n_proc is None:
-            self.pool = Pool()
-        else:
-            self.pool = Pool(n_proc)
+        self.pool = Pool(n_proc, initializer=_init_worker, initargs=(evaluator,))
 
     def close(self):
-        if self.pool is not None:
-            self.pool.close()
+        self.pool.close()
+        self.pool.join()
 
 
 class SearchConfiguration:
@@ -111,9 +101,9 @@ class SearchConfiguration:
         self.parallel_context = None
         if isinstance(parallelism, bool):
             if parallelism:
-                self.parallel_context = ParallelContext(spawner, evaluator)
+                self.parallel_context = ParallelContext(evaluator)
         elif parallelism > 1:
-            self.parallel_context = ParallelContext(spawner, evaluator, parallelism)
+            self.parallel_context = ParallelContext(evaluator, parallelism)
 
         if isinstance(selection, Selector):
             self.selection = DiscreteProbDistrib().add(selection, 1.0)
@@ -144,7 +134,7 @@ class SearchConfiguration:
             self.parallel_context.close()
 
 
-def _spawn_individual(spawner, genome_size, program_signature: ProgramSignature, *args):
+def _spawn_individual(spawner, genome_size, program_signature: ProgramSignature):
     return Individual(spawner.spawn_genome(genome_size), program_signature)
 
 
@@ -184,13 +174,8 @@ class SearchAlgorithm(ABC):
         pop_size = self.config.population_size
         signature = self.config.signature
         self.population = Population()
-        if self._p_context is not None:
-            gen_func = partial(_spawn_individual, self._p_context.ns.spawner, init_gn_size, signature)
-            for indiv in self._p_context.pool.imap_unordered(gen_func, range(pop_size)):
-                self.population.add(indiv)
-        else:
-            for i in range(pop_size):
-                self.population.add(_spawn_individual(spawner, init_gn_size, signature))
+        for i in range(pop_size):
+            self.population.add(_spawn_individual(spawner, init_gn_size, signature))
 
     @tap
     @abstractmethod
@@ -208,7 +193,7 @@ class SearchAlgorithm(ABC):
     def _full_step(self) -> bool:
         self.generation += 1
         if self._p_context is not None:
-            self.population.p_evaluate(self._p_context.ns.evaluator, self._p_context.pool)
+            self.population.p_evaluate(self._p_context.pool)
         else:
             self.population.evaluate(self.config.evaluator)
 
