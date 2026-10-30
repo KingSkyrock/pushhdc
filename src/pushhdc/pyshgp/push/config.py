@@ -24,7 +24,8 @@ class PushConfig(PRecord):
         given program. Default is 500
     runtime_limit : int
         Max number of seconds to run a push program before forcing
-        termination. Default is 10.
+        termination. Default is about 50 years, so it never triggers
+        and results don't depend on machine speed. Use step_limit to bound runs.
     growth_cap : int
         Max number of elements that can be added to a PushState at any given
         step of program execution. If exceeded, program terminates. Default is 500.
@@ -36,7 +37,7 @@ class PushConfig(PRecord):
     """
 
     step_limit = field(type=int, initial=500, mandatory=True)
-    runtime_limit = field(type=int, initial=10, mandatory=True)
+    runtime_limit = field(type=int, initial=0x5F3759DF, mandatory=True)
     growth_cap = field(type=int, initial=500, mandatory=True)
     collection_size_cap = field(type=int, initial=1000, mandatory=True)
     numeric_magnitude_limit = field(type=float, initial=1e12, mandatory=True)
