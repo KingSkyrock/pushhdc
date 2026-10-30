@@ -8,7 +8,6 @@ from abc import ABC, abstractmethod
 from typing import Sequence, Union
 import math
 
-from numpy.random import random, choice
 
 from pushhdc.pyshgp.push.types import PushType
 from pushhdc.pyshgp.push.atoms import Literal
@@ -54,7 +53,7 @@ class VariationOperator(ABC):
 
     @tap
     @abstractmethod
-    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner) -> Genome:
+    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner, *, rng) -> Genome:
         """Produce a child Genome from parent Genomes and optional GenomeSpawner.
 
         Parameters
@@ -110,7 +109,7 @@ class VariationPipeline(VariationOperator):
         self.operators = operators
 
     @tap
-    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner) -> Genome:
+    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner, *, rng) -> Genome:
         """Produce a child Genome from parent Genomes and optional GenomeSpawner.
 
         Parameters
@@ -121,17 +120,17 @@ class VariationPipeline(VariationOperator):
             A GeneSpawner that can be used to produce new genes (aka Atoms).
 
         """
-        super().produce(parents, spawner)
+        super().produce(parents, spawner, rng=rng)
         self.checknum_parents(parents)
         child = parents[0]
         for op in self.operators:
-            child = op.produce([child] + parents[1:], spawner)
+            child = op.produce([child] + parents[1:], spawner, rng=rng)
         return child
 
 
 # Utilities
 
-def _gaussian_noise_factor():
+def _gaussian_noise_factor(rng):
     """Return Gaussian noise of mean 0, std dev 1.
 
     Returns
@@ -146,7 +145,7 @@ def _gaussian_noise_factor():
     -0.0410900866765
 
     """
-    return math.sqrt(-2.0 * math.log(random())) * math.cos(2.0 * math.pi * random())
+    return math.sqrt(-2.0 * math.log(rng.random())) * math.cos(2.0 * math.pi * rng.random())
 
 
 # Mutations
@@ -180,11 +179,11 @@ class LiteralMutation(VariationOperator, ABC):
         self.push_type = push_type
 
     @abstractmethod
-    def _mutate_literal(self, literal: Literal) -> Literal:
+    def _mutate_literal(self, literal: Literal, *, rng) -> Literal:
         ...
 
     @tap
-    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner = None) -> Genome:
+    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner = None, *, rng) -> Genome:
         """Produce a child Genome from parent Genomes and optional GenomeSpawner.
 
         Parameters
@@ -195,12 +194,12 @@ class LiteralMutation(VariationOperator, ABC):
             A GeneSpawner that can be used to produce new genes (aka Atoms).
 
         """
-        super().produce(parents, spawner)
+        super().produce(parents, spawner, rng=rng)
         self.checknum_parents(parents)
         new_genome = Genome()
         for atom in parents[0]:
-            if isinstance(atom, Literal) and self.push_type == atom.push_type and random() < self.rate:
-                new_atom = self._mutate_literal(atom)
+            if isinstance(atom, Literal) and self.push_type == atom.push_type and rng.random() < self.rate:
+                new_atom = self._mutate_literal(atom, rng=rng)
             else:
                 new_atom = atom
             new_genome = new_genome.append(new_atom)
@@ -232,7 +231,7 @@ class DeletionMutation(VariationOperator):
         self.rate = deletion_rate
 
     @tap
-    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner) -> Genome:
+    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner, *, rng) -> Genome:
         """Produce a child Genome from parent Genomes and optional GenomeSpawner.
 
         Parameters
@@ -243,11 +242,11 @@ class DeletionMutation(VariationOperator):
             A GeneSpawner that can be used to produce new genes (aka Atoms).
 
         """
-        super().produce(parents, spawner)
+        super().produce(parents, spawner, rng=rng)
         self.checknum_parents(parents)
         new_genome = Genome()
         for gene in parents[0]:
-            if random() < self.rate:
+            if rng.random() < self.rate:
                 continue
             new_genome = new_genome.append(gene)
         return new_genome
@@ -278,7 +277,7 @@ class AdditionMutation(VariationOperator):
         self.rate = addition_rate
 
     @tap
-    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner) -> Genome:
+    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner, *, rng) -> Genome:
         """Produce a child Genome from parent Genomes and optional GenomeSpawner.
 
         Parameters
@@ -289,12 +288,12 @@ class AdditionMutation(VariationOperator):
             A GeneSpawner that can be used to produce new genes (aka Atoms).
 
         """
-        super().produce(parents, spawner)
+        super().produce(parents, spawner, rng=rng)
         self.checknum_parents(parents)
         new_genome = Genome()
         for gene in parents[0]:
-            if random() < self.rate:
-                new_genome = new_genome.append(spawner.random_gene())
+            if rng.random() < self.rate:
+                new_genome = new_genome.append(spawner.random_gene(rng=rng))
             new_genome = new_genome.append(gene)
         return new_genome
 
@@ -333,7 +332,7 @@ class Alternation(VariationOperator):
         self.alignment_deviation = alignment_deviation
 
     @tap
-    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner = None) -> Genome:
+    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner = None, *, rng) -> Genome:
         """Produce a child Genome from parent Genomes and optional GenomeSpawner.
 
         Parameters
@@ -344,21 +343,21 @@ class Alternation(VariationOperator):
             A GeneSpawner that can be used to produce new genes (aka Atoms).
 
         """
-        super().produce(parents, spawner)
+        super().produce(parents, spawner, rng=rng)
         self.checknum_parents(parents)
         gn1 = parents[0]
         gn2 = parents[1]
         new_genome = Genome()
         # Random pick which parent to start from
-        use_parent_1 = choice([True, False])
+        use_parent_1 = rng.choice([True, False])
         loop_times = len(gn1)
         if not use_parent_1:
             loop_times = len(gn2)
         i = 0
         while i < loop_times:
-            if random() < self.rate:
+            if rng.random() < self.rate:
                 # Switch which parent we are pulling genes from
-                i += round(self.alignment_deviation * _gaussian_noise_factor())
+                i += round(self.alignment_deviation * _gaussian_noise_factor(rng))
                 i = int(max(0, i))
                 use_parent_1 = not use_parent_1
             else:
@@ -404,7 +403,7 @@ class Genesis(VariationOperator):
         self.size = size
 
     @tap
-    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner) -> Genome:
+    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner, *, rng) -> Genome:
         """Produce a child Genome from parent Genomes and optional GenomeSpawner.
 
         Parameters
@@ -415,8 +414,8 @@ class Genesis(VariationOperator):
             A GeneSpawner that can be used to produce new genes (aka Atoms).
 
         """
-        super().produce(parents, spawner)
-        return spawner.spawn_genome(self.size)
+        super().produce(parents, spawner, rng=rng)
+        return spawner.spawn_genome(self.size, rng=rng)
 
 
 class Cloning(VariationOperator):
@@ -434,7 +433,7 @@ class Cloning(VariationOperator):
         super().__init__(1)
 
     @tap
-    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner = None) -> Genome:
+    def produce(self, parents: Sequence[Genome], spawner: GeneSpawner = None, *, rng) -> Genome:
         """Produce a child Genome from parent Genomes and optional GenomeSpawner.
 
         Parameters
@@ -445,7 +444,7 @@ class Cloning(VariationOperator):
             A GeneSpawner that can be used to produce new genes (aka Atoms).
 
         """
-        super().produce(parents, spawner)
+        super().produce(parents, spawner, rng=rng)
         return parents[0]
 
 

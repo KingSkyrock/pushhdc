@@ -48,25 +48,25 @@ class TestGenome:
 
 class TestGeneSpawner:
 
-    def test_random_instruction(self, simple_gene_spawner):
-        assert isinstance(simple_gene_spawner.random_instruction(), InstructionMeta)
+    def test_random_instruction(self, simple_gene_spawner, rng):
+        assert isinstance(simple_gene_spawner.random_instruction(rng=rng), InstructionMeta)
 
-    def test_random_literal(self, simple_gene_spawner):
-        assert isinstance(simple_gene_spawner.random_literal(), Literal)
+    def test_random_literal(self, simple_gene_spawner, rng):
+        assert isinstance(simple_gene_spawner.random_literal(rng=rng), Literal)
 
-    def test_random_erc(self, simple_gene_spawner):
-        assert isinstance(simple_gene_spawner.random_erc(), Literal)
+    def test_random_erc(self, simple_gene_spawner, rng):
+        assert isinstance(simple_gene_spawner.random_erc(rng=rng), Literal)
 
-    def test_random_gene(self, simple_gene_spawner):
-        assert isinstance(simple_gene_spawner.random_gene(), Atom)
+    def test_random_gene(self, simple_gene_spawner, rng):
+        assert isinstance(simple_gene_spawner.random_gene(rng=rng), Atom)
 
-    def test_spawn_genome(self, simple_gene_spawner):
-        gn = simple_gene_spawner.spawn_genome(10)
+    def test_spawn_genome(self, simple_gene_spawner, rng):
+        gn = simple_gene_spawner.spawn_genome(10, rng=rng)
         assert isinstance(gn, Genome)
         assert len(gn) == 10
 
-    def test_spawn_var_length_genome(self, simple_gene_spawner):
-        gn = simple_gene_spawner.spawn_genome((8, 10))
+    def test_spawn_var_length_genome(self, simple_gene_spawner, rng):
+        gn = simple_gene_spawner.spawn_genome((8, 10), rng=rng)
         assert isinstance(gn, Genome)
         assert len(gn) >= 8
         assert len(gn) <= 10
@@ -74,24 +74,24 @@ class TestGeneSpawner:
 
 class TestGenomeSimplifier:
 
-    def test_simplify_no_change(self, simple_individual):
+    def test_simplify_no_change(self, simple_individual, rng):
         evaluator = DatasetEvaluator([[]], [10])
         genome = simple_individual.genome
         err = evaluator.evaluate(simple_individual.program)
 
         gs = GenomeSimplifier(evaluator, simple_individual.signature)
-        new_genome, new_err = gs.simplify(genome, err, 100)
+        new_genome, new_err = gs.simplify(genome, err, 100, rng=rng)
 
         assert genome == new_genome
         assert new_err == [0.0]
 
-    def test_simplify(self, simple_individual, atoms):
+    def test_simplify(self, simple_individual, atoms, rng):
         evaluator = DatasetEvaluator([[]], [5])
         genome = simple_individual.genome
         err = evaluator.evaluate(simple_individual.program)
 
         gs = GenomeSimplifier(evaluator, simple_individual.signature)
-        new_genome, new_err = gs.simplify(genome, err, 1000)
+        new_genome, new_err = gs.simplify(genome, err, 1000, rng=rng)
 
         assert new_genome == Genome([atoms["5"]])
         assert new_err == [0.0]

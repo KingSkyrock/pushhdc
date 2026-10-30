@@ -167,7 +167,7 @@ class GeneSpawner:
         else:
             self.distribution = distribution
 
-    def random_input(self) -> Input:
+    def random_input(self, *, rng) -> Input:
         """Return a random ``Input``.
 
         Returns
@@ -175,9 +175,9 @@ class GeneSpawner:
         pyshgp.push.atoms.Input
 
         """
-        return Input(input_index=np.random.randint(self.n_inputs))
+        return Input(input_index=int(rng.integers(self.n_inputs)))
 
-    def random_instruction(self) -> InstructionMeta:
+    def random_instruction(self, *, rng) -> InstructionMeta:
         """Return a random Instruction from the InstructionSet.
 
         Returns
@@ -186,10 +186,10 @@ class GeneSpawner:
             A randomly selected Literal.
 
         """
-        i = np.random.choice(list(self.instruction_set.values()))
+        i = rng.choice(list(self.instruction_set.values()))
         return InstructionMeta(name=i.name, code_blocks=i.code_blocks)
 
-    def random_literal(self) -> Literal:
+    def random_literal(self, *, rng) -> Literal:
         """Return a random Literal from the set of Literals.
 
         Returns
@@ -198,12 +198,12 @@ class GeneSpawner:
             A randomly selected Literal.
 
         """
-        lit = np.random.choice(self.literals)
+        lit = rng.choice(self.literals)
         if not isinstance(lit, Literal):
             lit = infer_literal(lit, self.type_library)
         return lit
 
-    def random_erc(self) -> Literal:
+    def random_erc(self, *, rng) -> Literal:
         """Materialize a random ERC generator into a Literal and return it.
 
         Returns
@@ -212,12 +212,12 @@ class GeneSpawner:
             A Literal whose value comes from running a ERC generator function.
 
         """
-        erc_value = np.random.choice(self.erc_generators)()
+        erc_value = rng.choice(self.erc_generators)(rng)
         if not isinstance(erc_value, Literal):
             erc_value = infer_literal(erc_value, self.type_library)
         return erc_value
 
-    def random_gene(self) -> Atom:
+    def random_gene(self, *, rng) -> Atom:
         """Return a random Atom based on the GenomeSpawner's distribution.
 
         Returns
@@ -226,21 +226,21 @@ class GeneSpawner:
             An random Atom. Either an Instruction, Closer, or Literal.
 
         """
-        atom_type = self.distribution.sample()
+        atom_type = self.distribution.sample(rng=rng)
         if atom_type is GeneTypes.INPUT:
-            return self.random_input()
+            return self.random_input(rng=rng)
         elif atom_type is GeneTypes.INSTRUCTION:
-            return self.random_instruction()
+            return self.random_instruction(rng=rng)
         elif atom_type is GeneTypes.CLOSE:
             return Closer()
         elif atom_type is GeneTypes.LITERAL:
-            return self.random_literal()
+            return self.random_literal(rng=rng)
         elif atom_type is GeneTypes.ERC:
-            return self.random_erc()
+            return self.random_erc(rng=rng)
         else:
             raise ValueError("GenomeSpawner distribution bad atom type {t}".format(t=str(atom_type)))
 
-    def spawn_genome(self, size: Union[int, Sequence[int]]) -> Genome:
+    def spawn_genome(self, size: Union[int, Sequence[int]], *, rng) -> Genome:
         """Return a random Genome based on the GenomeSpawner's distribution.
 
         The genome will contain the specified number of Atoms if size is an
@@ -261,8 +261,8 @@ class GeneSpawner:
 
         """
         if isinstance(size, Sequence):
-            size = np.random.randint(size[0], size[1]) + 1
-        return Genome([self.random_gene() for _ in range(size)])
+            size = int(rng.integers(size[0], size[1])) + 1
+        return Genome([self.random_gene(rng=rng) for _ in range(size)])
 
 
 class GenomeSimplifier:
@@ -300,11 +300,11 @@ class GenomeSimplifier:
         self.evaluator = evaluator
         self.program_signature = program_signature
 
-    def _remove_rand_genes(self, genome: Genome) -> Genome:
+    def _remove_rand_genes(self, genome: Genome, *, rng) -> Genome:
         # @todo DRY with deletion variation operator.
         gn = genome
-        n_genes_to_remove = min(np.random.randint(1, 4), len(genome) - 1)
-        ndx_of_genes_to_remove = np.random.choice(np.arange(len(gn)), n_genes_to_remove, replace=False)
+        n_genes_to_remove = min(int(rng.integers(1, 4)), len(genome) - 1)
+        ndx_of_genes_to_remove = rng.choice(len(gn), n_genes_to_remove, replace=False)
         ndx_of_genes_to_remove[::-1].sort()
         for ndx in ndx_of_genes_to_remove:
             gn = gn.delete(ndx)
@@ -316,8 +316,8 @@ class GenomeSimplifier:
         return self.evaluator.evaluate(program)
 
     @tap
-    def _step(self, genome: Genome, errors_to_beat: np.ndarray) -> Tuple[Genome, np.ndarray]:
-        new_gn = self._remove_rand_genes(genome)
+    def _step(self, genome: Genome, errors_to_beat: np.ndarray, *, rng) -> Tuple[Genome, np.ndarray]:
+        new_gn = self._remove_rand_genes(genome, rng=rng)
         new_errs = self._errors_of_genome(new_gn)
         if np.sum(new_errs) <= np.sum(errors_to_beat):
             return new_gn, new_errs
@@ -327,7 +327,9 @@ class GenomeSimplifier:
     def simplify(self,
                  genome: Genome,
                  original_errors: np.ndarray,
-                 steps: int = 2000) -> Tuple[Genome, np.ndarray]:
+                 steps: int = 2000,
+                 *,
+                 rng) -> Tuple[Genome, np.ndarray]:
         """Simplify the given genome while maintaining error.
 
         Parameters
@@ -348,7 +350,7 @@ class GenomeSimplifier:
         gn = genome
         errs = original_errors
         for step in range(steps):
-            gn, errs = self._step(gn, errs)
+            gn, errs = self._step(gn, errs, rng=rng)
             if len(gn) == 1:
                 break
         return gn, errs

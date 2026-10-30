@@ -67,6 +67,10 @@ class SearchConfiguration:
         Set the number of processes to spawn for use when performing embarrassingly
         parallel tasks. If false, no processes will spawn and compuation will be
         serial. Default is true, which spawns one process per available cpu.
+    seed : Union[int, np.random.Generator], optional
+        Seed for the random number generator that drives the search. Runs with
+        the same seed produce the same result. Default is None, which seeds
+        from the operating system.
     verbosity_config :  Union[VerbosityConfig, str], optional
         A VerbosityConfig controlling what is logged during the search. Default
         is no verbosity.
@@ -87,6 +91,7 @@ class SearchConfiguration:
                  initial_genome_size: Tuple[int, int] = (10, 50),
                  simplification_steps: int = 2000,
                  parallelism: Union[int, bool] = True,
+                 seed: Union[int, np.random.Generator, None] = None,
                  **kwargs):
         self.signature = signature
         self.evaluator = evaluator
@@ -96,6 +101,7 @@ class SearchConfiguration:
         self.error_threshold = error_threshold
         self.initial_genome_size = initial_genome_size
         self.simplification_steps = simplification_steps
+        self.rng = np.random.default_rng(seed)
         self.ext = kwargs
 
         self.parallel_context = None
@@ -123,19 +129,19 @@ class SearchConfiguration:
 
     def get_selector(self):
         """Return a Selector."""
-        return self.selection.sample()
+        return self.selection.sample(rng=self.rng)
 
     def get_variation_op(self):
         """Return a VariationOperator."""
-        return self.variation.sample()
+        return self.variation.sample(rng=self.rng)
 
     def tear_down(self):
         if self.parallel_context is not None:
             self.parallel_context.close()
 
 
-def _spawn_individual(spawner, genome_size, program_signature: ProgramSignature):
-    return Individual(spawner.spawn_genome(genome_size), program_signature)
+def _spawn_individual(spawner, genome_size, program_signature: ProgramSignature, rng):
+    return Individual(spawner.spawn_genome(genome_size, rng=rng), program_signature)
 
 
 class SearchAlgorithm(ABC):
@@ -175,7 +181,7 @@ class SearchAlgorithm(ABC):
         signature = self.config.signature
         self.population = Population()
         for i in range(pop_size):
-            self.population.add(_spawn_individual(spawner, init_gn_size, signature))
+            self.population.add(_spawn_individual(spawner, init_gn_size, signature, self.config.rng))
 
     @tap
     @abstractmethod
@@ -225,7 +231,8 @@ class SearchAlgorithm(ABC):
         simp_genome, simp_error_vector = simplifier.simplify(
             self.best_seen.genome,
             self.best_seen.error_vector,
-            self.config.simplification_steps
+            self.config.simplification_steps,
+            rng=self.config.rng,
         )
         simplified_best = Individual(simp_genome, self.config.signature)
         simplified_best.error_vector = simp_error_vector
@@ -249,8 +256,8 @@ class GeneticAlgorithm(SearchAlgorithm):
     def _make_child(self) -> Individual:
         op = self.config.get_variation_op()
         selector = self.config.get_selector()
-        parent_genomes = [p.genome for p in selector.select(self.population, n=op.num_parents)]
-        child_genome = op.produce(parent_genomes, self.config.spawner)
+        parent_genomes = [p.genome for p in selector.select(self.population, n=op.num_parents, rng=self.config.rng)]
+        child_genome = op.produce(parent_genomes, self.config.spawner, rng=self.config.rng)
         return Individual(child_genome, self.config.signature)
 
     @tap
@@ -316,14 +323,15 @@ class SimulatedAnnealing(SearchAlgorithm):
         candidate = Individual(
             self.config.get_variation_op().produce(
                 [self.population.best().genome],
-                self.config.spawner
+                self.config.spawner,
+                rng=self.config.rng,
             ),
             self.config.signature
         )
         candidate.error_vector = self.config.evaluator.evaluate(candidate.program)
 
         acceptance_probability = self._acceptance(candidate.total_error)
-        if np.random.random() < acceptance_probability:
+        if self.config.rng.random() < acceptance_probability:
             self.population = Population().add(candidate)
 
 

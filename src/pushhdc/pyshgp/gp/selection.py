@@ -5,7 +5,6 @@ from typing import Sequence, Union
 from operator import attrgetter
 
 import numpy as np
-from numpy.random import random, choice, shuffle
 
 from pushhdc.pyshgp.gp.individual import Individual
 from pushhdc.pyshgp.gp.population import Population
@@ -17,7 +16,7 @@ class Selector(ABC):
     """Base class for all selection algorithms."""
 
     @abstractmethod
-    def select_one(self, population: Population) -> Individual:
+    def select_one(self, population: Population, *, rng) -> Individual:
         """Return single individual from population.
 
         Parameters
@@ -35,7 +34,7 @@ class Selector(ABC):
 
     @tap
     @abstractmethod
-    def select(self, population: Population, n: int = 1) -> Sequence[Individual]:
+    def select(self, population: Population, n: int = 1, *, rng) -> Sequence[Individual]:
         """Return `n` individuals from the population.
 
         Parameters
@@ -58,7 +57,7 @@ class SimpleMultiSelectorMixin:
     """A mixin for ``Selector`` classes where selecting many individuals is done by repeated calls to `select_one`."""
 
     @tap
-    def select(self, population: Population, n: int = 1) -> Sequence[Individual]:
+    def select(self, population: Population, n: int = 1, *, rng) -> Sequence[Individual]:
         """Return `n` individuals from the population.
 
         Parameters
@@ -76,7 +75,7 @@ class SimpleMultiSelectorMixin:
         """
         selected = []
         for i in range(n):
-            selected.append(self.select_one(population))
+            selected.append(self.select_one(population, rng=rng))
         return selected
 
 
@@ -86,7 +85,7 @@ class FitnessProportionate(Selector):
     See: https://en.wikipedia.org/wiki/Fitness_proportionate_selection
     """
 
-    def select_one(self, population: Population) -> Individual:
+    def select_one(self, population: Population, *, rng) -> Individual:
         """Return single individual from population.
 
         Parameters
@@ -100,10 +99,10 @@ class FitnessProportionate(Selector):
             The selected Individual.
 
         """
-        return self.select(population)[0]
+        return self.select(population, rng=rng)[0]
 
     @tap
-    def select(self, population: Population, n: int = 1) -> Sequence[Individual]:
+    def select(self, population: Population, n: int = 1, *, rng) -> Sequence[Individual]:
         """Return `n` individuals from the population.
 
         Parameters
@@ -119,11 +118,11 @@ class FitnessProportionate(Selector):
             The selected Individuals.
 
         """
-        super().select(population, n)
+        super().select(population, n, rng=rng)
         population_total_errors = np.array([i.total_error for i in population])
         sum_of_total_errors = np.sum(population_total_errors)
         probabilities = 1.0 - (population_total_errors / sum_of_total_errors)
-        selected_ndxs = np.searchsorted(np.cumsum(probabilities), random(n))
+        selected_ndxs = np.searchsorted(np.cumsum(probabilities), rng.random(n))
         return [population[ndx] for ndx in selected_ndxs]
 
 
@@ -149,7 +148,7 @@ class Tournament(SimpleMultiSelectorMixin, Selector):
     def __init__(self, tournament_size: int = 7):
         self.tournament_size = tournament_size
 
-    def select_one(self, population: Population) -> Individual:
+    def select_one(self, population: Population, *, rng) -> Individual:
         """Return single individual from population.
 
         Parameters
@@ -163,7 +162,7 @@ class Tournament(SimpleMultiSelectorMixin, Selector):
             The selected Individual.
 
         """
-        tournament = choice(population, self.tournament_size, replace=False)
+        tournament = rng.choice(population, self.tournament_size, replace=False)
         return min(tournament, key=attrgetter('total_error'))
 
 
@@ -187,23 +186,24 @@ class CaseStream:
 
     # @todo generalize to RandomIndexStream
 
-    def __init__(self, n_cases: int):
+    def __init__(self, n_cases: int, *, rng):
         self.cases = list(range(n_cases))
+        self.rng = rng
 
     def __iter__(self):
-        shuffle(self.cases)
+        self.rng.shuffle(self.cases)
         for case in self.cases:
             yield case
 
 
-def one_individual_per_error_vector(population: Population) -> Sequence[Individual]:
+def one_individual_per_error_vector(population: Population, *, rng) -> Sequence[Individual]:
     """Preselect one individual per distinct error vector.
 
     Crucial for avoiding the worst case runtime of lexicase selection but
     does not impact the behavior of which individual gets selected.
     """
     population_list = list(copy(population))
-    shuffle(population_list)
+    rng.shuffle(population_list)
     preselected = []
     error_vector_hashes = set()
     for individual in population_list:
@@ -234,8 +234,8 @@ class Lexicase(SimpleMultiSelectorMixin, Selector):
     def _epsilon_from_mad(error_matrix: np.ndarray):
         return np.apply_along_axis(median_absolute_deviation, 0, error_matrix)
 
-    def _select_with_stream(self, population: Population, cases: CaseStream) -> Individual:
-        candidates = one_individual_per_error_vector(population)
+    def _select_with_stream(self, population: Population, cases: CaseStream, *, rng) -> Individual:
+        candidates = one_individual_per_error_vector(population, rng=rng)
 
         ep = self.epsilon
         if isinstance(ep, bool) and ep:
@@ -255,9 +255,9 @@ class Lexicase(SimpleMultiSelectorMixin, Selector):
                 max_error += ep
 
             candidates = [i for i in candidates if i.error_vector[case] <= max_error]
-        return choice(candidates)
+        return rng.choice(candidates)
 
-    def select_one(self, population: Population) -> Individual:
+    def select_one(self, population: Population, *, rng) -> Individual:
         """Return single individual from population.
 
         Parameters
@@ -270,11 +270,11 @@ class Lexicase(SimpleMultiSelectorMixin, Selector):
         Individual
             The selected Individual.
         """
-        cases = CaseStream(len(population[0].error_vector))
-        return self._select_with_stream(population, cases)
+        cases = CaseStream(len(population[0].error_vector), rng=rng)
+        return self._select_with_stream(population, cases, rng=rng)
 
     @tap
-    def select(self, population: Population, n: int = 1) -> Sequence[Individual]:
+    def select(self, population: Population, n: int = 1, *, rng) -> Sequence[Individual]:
         """Return `n` individuals from the population.
 
         Parameters
@@ -290,13 +290,13 @@ class Lexicase(SimpleMultiSelectorMixin, Selector):
             The selected Individuals.
 
         """
-        return super().select(population, n)
+        return super().select(population, n, rng=rng)
 
 
 class Elite(Selector):
     """Returns the best N individuals by total error."""
 
-    def select_one(self, population: Population) -> Individual:
+    def select_one(self, population: Population, *, rng) -> Individual:
         """Return single individual from population.
 
         Parameters
@@ -313,7 +313,7 @@ class Elite(Selector):
         return population.best()
 
     @tap
-    def select(self, population: Population, n: int = 1) -> Sequence[Individual]:
+    def select(self, population: Population, n: int = 1, *, rng) -> Sequence[Individual]:
         """Return `n` individuals from the population.
 
         Parameters
@@ -329,7 +329,7 @@ class Elite(Selector):
             The selected Individuals.
 
         """
-        super().select(population, n)
+        super().select(population, n, rng=rng)
         return population.best_n(n)
 
 

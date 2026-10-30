@@ -1,5 +1,5 @@
+import numpy as np
 import pytest
-import random
 from math import pow, sqrt
 
 from pushhdc.pyshgp.gp.individual import Individual
@@ -14,6 +14,11 @@ from pushhdc.pyshgp.push.interpreter import PushInterpreter
 from pushhdc.pyshgp.push.program import ProgramSignature, Program
 from pushhdc.pyshgp.push.state import PushState
 from pushhdc.pyshgp.gp.genome import Genome, GeneSpawner, genome_to_code
+
+
+@pytest.fixture(scope="function")
+def rng():
+    return np.random.default_rng(0)
 
 
 @pytest.fixture(scope="session")
@@ -79,7 +84,7 @@ def simple_gene_spawner(instr_set):
     i_set = InstructionSet()
     i_set.register_list([instr_set["int_add"], instr_set["int_sub"], instr_set["exec_if"]])
     l_set = [5, 1.2, True]
-    return GeneSpawner(1, i_set, l_set, [random.random])
+    return GeneSpawner(1, i_set, l_set, [lambda rng: rng.random()])
 
 
 # Custom Types
