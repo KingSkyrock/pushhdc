@@ -24,6 +24,9 @@ class Instruction(ABC):
         The number of CodeBlocks to open following the instruction in a Genome.
     docstring : str, optional
         A string describing in the behavior of the Instruction.
+    cost : int, optional
+        How much running the instruction once adds to a program's
+        inference cost. Default is 0.
 
     Attributes
     ----------
@@ -33,15 +36,19 @@ class Instruction(ABC):
         The number of CodeBlocks to open following the instruction in a Genome.
     docstring : str, optional
         A string describing in the behavior of the Instruction.
+    cost : int, optional
+        How much running the instruction once adds to a program's
+        inference cost. Default is 0.
 
     """
 
-    __slots__ = ["name", "code_block", "docstring"]
+    __slots__ = ["name", "code_block", "docstring", "cost"]
 
-    def __init__(self, name: str, code_blocks: int, docstring="Write me!"):
+    def __init__(self, name: str, code_blocks: int, docstring="Write me!", cost: int = 0):
         self.name = name
         self.code_blocks = code_blocks
         self.docstring = docstring
+        self.cost = cost
 
     @abstractmethod
     def evaluate(self, push_state: PushState, push_config: PushConfig = None) -> PushState:
@@ -125,10 +132,13 @@ class SimpleInstruction(Instruction):
         The number of CodeBlocks to open following the instruction in a Genome.
     docstring : str, optional
         A string describing in the behavior of the Instruction.
+    cost : int, optional
+        How much running the instruction once adds to a program's
+        inference cost. Default is 0.
 
     """
 
-    __slots__ = ["name", "f", "input_stacks", "output_stacks", "code_blocks", "docstring"]
+    __slots__ = ["name", "f", "input_stacks", "output_stacks", "code_blocks", "docstring", "cost"]
 
     def __init__(self,
                  name: str,
@@ -136,8 +146,9 @@ class SimpleInstruction(Instruction):
                  input_stacks: Sequence[str],
                  output_stacks: Sequence[str],
                  code_blocks: int,
-                 docstring="Write me!"):
-        super().__init__(name, code_blocks, docstring)
+                 docstring="Write me!",
+                 cost: int = 0):
+        super().__init__(name, code_blocks, docstring, cost)
         self.f = f
         self.input_stacks = input_stacks
         self.output_stacks = output_stacks
@@ -188,15 +199,16 @@ class SimpleInstruction(Instruction):
 class StateToStateInstruction(Instruction):
     """Instruction that takes entire PushState and returns entire PushState."""
 
-    __slots__ = ["name", "f", "stacks_used", "code_blocks", "docstring"]
+    __slots__ = ["name", "f", "stacks_used", "code_blocks", "docstring", "cost"]
 
     def __init__(self,
                  name: str,
                  f: Callable,
                  stacks_used: Sequence[str],
                  code_blocks: int,
-                 docstring="Write me!"):
-        super().__init__(name, code_blocks, docstring)
+                 docstring="Write me!",
+                 cost: int = 0):
+        super().__init__(name, code_blocks, docstring, cost)
         self.f = f
         self.stacks_used = set(stacks_used)
 
@@ -257,10 +269,13 @@ class TakesStateInstruction(Instruction):
         The number of CodeBlocks to open following the instruction in a Genome.
     docstring : str, optional
         A string describing in the behavior of the Instruction.
+    cost : int, optional
+        How much running the instruction once adds to a program's
+        inference cost. Default is 0.
 
     """
 
-    __slots__ = ["name", "f", "output_stacks", "other_stacks", "code_blocks", "docstring"]
+    __slots__ = ["name", "f", "output_stacks", "other_stacks", "code_blocks", "docstring", "cost"]
 
     def __init__(self,
                  name: str,
@@ -268,8 +283,9 @@ class TakesStateInstruction(Instruction):
                  output_stacks: Sequence[str],
                  other_stacks: Sequence[str],
                  code_blocks: int,
-                 docstring="Write me!"):
-        super().__init__(name, code_blocks, docstring)
+                 docstring="Write me!",
+                 cost: int = 0):
+        super().__init__(name, code_blocks, docstring, cost)
         self.f = f
         self.output_stacks = output_stacks
         self.other_stacks = other_stacks
@@ -340,10 +356,13 @@ class ProducesManyOfTypeInstruction(Instruction):
         The number of CodeBlocks to open following the instruction in a Genome.
     docstring : str, optional
         A string describing in the behavior of the Instruction.
+    cost : int, optional
+        How much running the instruction once adds to a program's
+        inference cost. Default is 0.
 
     """
 
-    __slots__ = ["name", "f", "input_stacks", "output_stack", "code_blocks", "docstring"]
+    __slots__ = ["name", "f", "input_stacks", "output_stack", "code_blocks", "docstring", "cost"]
 
     def __init__(self,
                  name: str,
@@ -351,8 +370,9 @@ class ProducesManyOfTypeInstruction(Instruction):
                  input_stacks: Sequence[str],
                  output_stack: str,
                  code_blocks: int,
-                 docstring="Write me!"):
-        super().__init__(name, code_blocks, docstring)
+                 docstring="Write me!",
+                 cost: int = 0):
+        super().__init__(name, code_blocks, docstring, cost)
         self.f = f
         self.input_stacks = input_stacks
         self.output_stack = output_stack
