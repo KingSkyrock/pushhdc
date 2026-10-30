@@ -138,7 +138,7 @@ def instructions(type_library: PushTypeLibrary):
     """Return all core numeric instructions."""
     i: List[Instruction] = []
 
-    for push_type in set(CORE_VECTOR_PUSH_TYPES).intersection(set(type_library.values())):
+    for push_type in [t for t in CORE_VECTOR_PUSH_TYPES if t in type_library.values()]:
         vec_type_name = push_type.name
         el_type_name = vec_type_name.replace("vector_", "")
 

@@ -63,7 +63,7 @@ def explode(_):
 
 
 # small search for y = x^2 + 1 using integer instructions
-def make_config(parallelism, evaluator_cls=DatasetEvaluator):
+def make_config(parallelism, evaluator_cls=DatasetEvaluator, seed=None):
     X =np.arange(-10, 10).reshape(-1, 1)
     y = [[int(x[0] ** 2 + 1)] for x in X]
     spawner = GeneSpawner(
@@ -81,13 +81,13 @@ def make_config(parallelism, evaluator_cls=DatasetEvaluator):
         initial_genome_size=(5, 20),
         simplification_steps=5,
         parallelism=parallelism,
+        seed=seed,
     )
 
 
 # seeded search, returns its initial population and best program
 def run_search(parallelism):
-    np.random.seed(0)
-    config = make_config(parallelism)
+    config = make_config(parallelism, seed=0)
     try:
         ga = GeneticAlgorithm(config)
         initial = [indiv.program.pretty_str() for indiv in ga.population]

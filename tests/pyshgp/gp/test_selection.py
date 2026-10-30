@@ -27,34 +27,34 @@ def population(atoms, push_config):
     return Population([i1, i2, i3, i4])
 
 
-def test_fitness_proportionate(population):
+def test_fitness_proportionate(population, rng):
     s = FitnessProportionate()
-    assert isinstance(s.select_one(population), Individual)
-    assert len(s.select(population, 2)) == 2
+    assert isinstance(s.select_one(population, rng=rng), Individual)
+    assert len(s.select(population, 2, rng=rng)) == 2
 
 
-def test_tournament(population):
+def test_tournament(population, rng):
     s = Tournament(2)
-    i = s.select_one(population)
+    i = s.select_one(population, rng=rng)
     assert i.total_error <= 12
 
 
-def test_lexicase(population):
+def test_lexicase(population, rng):
     s = Lexicase()
-    i = s.select_one(population)
+    i = s.select_one(population, rng=rng)
     assert i.total_error == 20 or i.total_error == 6
 
 
-def test_epsilon_lexicase(population):
+def test_epsilon_lexicase(population, rng):
     s = Lexicase(1.1)
-    i = s.select_one(population)
+    i = s.select_one(population, rng=rng)
     assert i.total_error == 20 or i.total_error == 6
 
 
-def test_elite(population):
+def test_elite(population, rng):
     s = Elite()
-    i = s.select_one(population)
+    i = s.select_one(population, rng=rng)
     assert i.total_error == 6
-    best_two = s.select(population, 2)
+    best_two = s.select(population, 2, rng=rng)
     assert best_two[0].total_error == 6
     assert best_two[1].total_error == 9

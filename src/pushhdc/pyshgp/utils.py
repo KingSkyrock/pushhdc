@@ -52,17 +52,17 @@ class DiscreteProbDistrib:
         """Return the number of elements in the distribution."""
         return len(self.elements)
 
-    def sample(self):
+    def sample(self, *, rng):
         """Return a sample from the distribution."""
         if self.size() == 1:
             return self.elements[0]
-        return np.random.choice(self.elements, p=self._normalized_probabilities)
+        return rng.choice(self.elements, p=self._normalized_probabilities)
 
-    def sample_n(self, n: int = 1, replace: bool = True):
+    def sample_n(self, n: int = 1, replace: bool = True, *, rng):
         """Return n samples from the distribution."""
         if self.size() == 1 and replace:
             return [self.elements[0]] * n
-        return np.random.choice(self.elements, n, replace, self._normalized_probabilities)
+        return rng.choice(self.elements, n, replace, self._normalized_probabilities)
 
 
 class Token(Enum):

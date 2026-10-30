@@ -2,11 +2,9 @@ import os
 
 import numpy as np
 import pandas as pd
-import random
 
 import pytest
 from math import pow, sqrt
-from functools import partial
 
 from pushhdc.pyshgp.gp.individual import Individual
 
@@ -24,7 +22,7 @@ def simple_test_spawner():
         instruction_set=instruction_set,
         literals=[],
         erc_generators=[
-            partial(random.randint, 0, 10),
+            lambda rng: int(rng.integers(0, 11)),
         ]
     )
     return spawner

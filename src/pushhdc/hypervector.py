@@ -8,7 +8,13 @@ class HyperVector:
     Represents a high-dimensional vector.
     """
 
-    def __init__(self, data: np.ndarray, dimension: int = 10000) -> None:
+    def __init__(
+        self,
+        data: np.ndarray | None = None,
+        dimension: int = 10000,
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> None:
         """
         Initializes from an existing NumPy array,
         or defaults to random bipolar initialization (-1 or +1).
@@ -17,14 +23,17 @@ class HyperVector:
             self.data: np.ndarray = data.astype(np.float32)
             self.dimension: int = self.data.shape[0]
         else:
-            random_hv = self.random(dimension=dimension)
+            if rng is None:
+                raise ValueError("rng is required to make a random hypervector")
+            random_hv = self.random(dimension=dimension, rng=rng)
             self.data = random_hv.data
             self.dimension = random_hv.dimension
 
     @classmethod
-    def random(cls, dimension: int = 10000) -> "HyperVector":
+    def random(
+        cls, dimension: int = 10000, *, rng: np.random.Generator
+    ) -> "HyperVector":
         """Generate a new orthogonal random bipolar hypervector."""
-        rng = np.random.default_rng()
         choices = np.array([-1.0, 1.0], dtype=np.float32)
         raw_data = rng.choice(choices, size=(dimension,))
         return cls(data=raw_data, dimension=dimension)
@@ -42,7 +51,9 @@ class HyperVector:
         bound_data = self.data * other.data
         return HyperVector(data=bound_data, dimension=self.dimension)
 
-    def bundle(self, other: "HyperVector") -> "HyperVector":
+    def bundle(
+        self, other: "HyperVector", *, rng: np.random.Generator
+    ) -> "HyperVector":
         """
         Bundles this hypervector with another using superposition (element-wise addition),
         thresholding, and random tie-breaking for exact zeros.
@@ -62,7 +73,6 @@ class HyperVector:
         if np.any(zeros):
             num_zeros = np.count_nonzero(zeros)
             # Efficient binary random choice: maps {0, 1} to {-1.0, 1.0}
-            rng = np.random.default_rng()
             bundled_data[zeros] = rng.choice([-1.0, 1.0], size=num_zeros)
 
         return HyperVector(bundled_data)
@@ -94,8 +104,9 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     # Test execution
     dim = 10000
-    hv1 = HyperVector.random(dimension=dim)
-    hv2 = HyperVector.random(dimension=dim)
+    rng = np.random.default_rng(0)
+    hv1 = HyperVector.random(dimension=dim, rng=rng)
+    hv2 = HyperVector.random(dimension=dim, rng=rng)
 
     # Test Binding
     bound_hv = hv1.bind(hv2)
@@ -105,7 +116,7 @@ if __name__ == "__main__":
     )
 
     # Test Bundling
-    set_hv = hv1.bundle(hv2)
+    set_hv = hv1.bundle(hv2, rng=rng)
     logger.info("Bundle similarity: %.4f", set_hv.cosine_similarity(hv1))
 
     # Test Permutation

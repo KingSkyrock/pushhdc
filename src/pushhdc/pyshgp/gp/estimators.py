@@ -1,6 +1,8 @@
 """The :mod:`estimator` module defines a ``PushEstimator`` class."""
 from typing import Union, Tuple
 
+import numpy as np
+
 from pushhdc.pyshgp.gp.individual import Individual
 
 import pushhdc.pyshgp.gp.search as sr
@@ -54,6 +56,10 @@ class PushEstimator:
         Set the number of processes to spawn for use when performing embarrassingly
         parallel tasks. If false, no processes will spawn and compuation will be
         serial. Default is true, which spawns one process per available cpu.
+    seed : Union[int, np.random.Generator], optional
+        Seed for the random number generator that drives the search. Fits with
+        the same seed produce the same solution. Default is None, which seeds
+        from the operating system.
     verbose : int, optional
         Indicates if verbose printing should be used during searching.
         Default is 0. Options are 0, 1, or 2.
@@ -76,6 +82,7 @@ class PushEstimator:
                  last_str_from_stdout: bool = False,
                  interpreter: PushInterpreter = "default",
                  parallelism: Union[int, bool] = False,
+                 seed: Union[int, np.random.Generator, None] = None,
                  push_config: PushConfig = "default",
                  verbose: int = 0,
                  **kwargs):
@@ -89,6 +96,7 @@ class PushEstimator:
         self.simplification_steps = simplification_steps
         self.last_str_from_stdout = last_str_from_stdout
         self.parallelism = parallelism
+        self.seed = seed
         self.verbose = verbose
         self.ext = kwargs
         set_verbosity(self.verbose)
@@ -128,6 +136,7 @@ class PushEstimator:
             initial_genome_size=self.initial_genome_size,
             simplification_steps=self.simplification_steps,
             parallelism=self.parallelism,
+            seed=self.seed,
             push_config=self.push_config
         )
         self.search = sr.get_search_algo(self._search_name, config=search_config, **self.ext)
