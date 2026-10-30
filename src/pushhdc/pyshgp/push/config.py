@@ -25,7 +25,8 @@ class PushConfig(PRecord):
     runtime_limit : int
         Max number of seconds to run a push program before forcing
         termination. Default is about 50 years, so it never triggers
-        and results don't depend on machine speed. Use step_limit to bound runs.
+        and results don't depend on machine speed. Prefer using step_limit to
+        bound runs.
     growth_cap : int
         Max number of elements that can be added to a PushState at any given
         step of program execution. If exceeded, program terminates. Default is 500.
