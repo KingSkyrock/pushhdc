@@ -31,7 +31,6 @@ from pushhdc.pyshgp.gp.search import (
     SearchConfiguration,
 )
 from pushhdc.pyshgp.push.atoms import Literal
-from pushhdc.pyshgp.push.instruction import SimpleInstruction
 from pushhdc.pyshgp.push.instruction_set import InstructionSet
 from pushhdc.pyshgp.push.interpreter import PushInterpreter
 from pushhdc.pyshgp.push.program import ProgramSignature
@@ -56,10 +55,6 @@ class AllTiedEvaluator(Evaluator):
         if program.code[0].value == 0:
             time.sleep(0.5)
         return np.array([1.0])
-
-
-def explode(_):
-    raise RuntimeError("boom")
 
 
 # small search for y = x^2 + 1 using integer instructions
@@ -115,15 +110,13 @@ def evaluate_tied_population(parallelism):
     return [indiv.program.code[0].value for indiv in population]
 
 
-# parallel estimator whose only instruction raises
+# parallel estimator whose programs read a second input that the data doesn't
+# have, so fit raises
 def make_exploding_estimator():
     instruction_set =InstructionSet(register_core=False)
-    instruction_set.register(
-        SimpleInstruction("explode", explode, ["int"], ["int"], code_blocks=0)
-    )
     return PushEstimator(
         spawner=GeneSpawner(
-            n_inputs=1,
+            n_inputs=2,
             instruction_set=instruction_set,
             literals=[],
             erc_generators=[],
@@ -183,12 +176,12 @@ def test_evaluator_sent_at_most_once_per_worker():
 def test_fit_that_crashes_still_stops_worker_processes():
     """a fit that raises still shuts down its worker processes.
 
-    the search raises because every program runs an instruction that throws.
+    the search raises because programs read an input that doesn't exist.
     fails if ``fit`` skips tear down when the search raises, or if tear down
     closes the pool without waiting for the workers to exit.
     """
     estimator = make_exploding_estimator()
     before = set(multiprocessing.active_children())
-    with pytest.raises(PushError, match="boom"):
+    with pytest.raises(PushError, match="IndexError"):
         estimator.fit(np.arange(10).reshape(-1, 1), np.arange(10).reshape(-1, 1))
     assert set(multiprocessing.active_children()) <= before

@@ -1,4 +1,5 @@
 """The :mod:`interpreter` module defines the ``PushInterpreter`` used to run Push programs."""
+import logging
 import traceback
 from typing import Union
 import time
@@ -12,6 +13,8 @@ from pushhdc.pyshgp.push.atoms import Atom, Closer, Literal, InstructionMeta, Co
 from pushhdc.pyshgp.push.config import PushConfig
 from pushhdc.pyshgp.tap import tap
 from pushhdc.pyshgp.validation import PushError
+
+logger = logging.getLogger(__name__)
 
 
 class PushInterpreterStatus(Enum):
@@ -42,6 +45,14 @@ class PushInterpreter:
     status : PushInterpreterStatus
         A string denoting if the interpreter has encountered a situation
         where non-standard termination was required.
+    steps : int
+        Number of atoms (literals, inputs, code) evaluated in the last run.
+    cost : int
+        Sum of the ``cost`` of every instruction attempted in the last run,
+        including ones that did nothing. Used as the program's inference cost.
+    errors : int
+        Number of instructions that raised an exception in the last run. Each
+        one is skipped as a no-op instead of stopping the run.
 
     """
 
@@ -60,6 +71,9 @@ class PushInterpreter:
         # Initialize the PushState and status
         self.state: PushState = None
         self.status: PushInterpreterStatus = None
+        self.steps = 0
+        self.cost = 0
+        self.errors = 0
         self._validate()
 
     def _validate(self):
@@ -98,7 +112,13 @@ class PushInterpreter:
         """
         try:
             if isinstance(atom, InstructionMeta):
-                self._evaluate_instruction(self.instruction_set[atom.name], config)
+                instruction = self.instruction_set[atom.name]
+                self.cost += instruction.cost
+                try:
+                    self._evaluate_instruction(instruction, config)
+                except Exception:
+                    self.errors += 1
+                    logger.debug("%s raised, skipping it", atom.name, exc_info=True)
             elif isinstance(atom, Input):
                 input_value = self.state.inputs[atom.input_index]
                 self.state.untyped.append(input_value)
@@ -163,7 +183,9 @@ class PushInterpreter:
         self.state.load_code(program.code)
         self.state.load_inputs(inputs)
         stop_time = time.time() + push_config.runtime_limit
-        steps = 0
+        self.steps = 0
+        self.cost = 0
+        self.errors = 0
 
         if print_trace:
             print("Initial State:")
@@ -172,7 +194,7 @@ class PushInterpreter:
         # Iterate atom evaluation until entire program is evaluated.
         while len(self.state["exec"]) > 0:
             # Stopping conditions
-            if steps > push_config.step_limit:
+            if self.steps > push_config.step_limit:
                 self.status = PushInterpreterStatus.step_limit_exceeded
                 break
             if time.time() > stop_time:
@@ -195,10 +217,10 @@ class PushInterpreter:
 
             if print_trace:
                 duration = time.time() - start
-                print("Current State (step {step}):".format(step=steps))
+                print("Current State (step {step}):".format(step=self.steps))
                 self.state.pretty_print()
                 print("Step duration:", duration)
-            steps += 1
+            self.steps += 1
 
         if print_trace:
             print("Finished program evaluation.")
