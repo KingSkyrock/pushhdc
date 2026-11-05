@@ -8,7 +8,7 @@ class HyperVector:
     Represents a high-dimensional vector.
     """
 
-    __hash__ = None  # mutable / array-backed; equality is value-based only
+    __hash__ = None  # type: ignore[assignment]
 
     def __init__(
         self,

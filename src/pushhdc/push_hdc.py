@@ -11,7 +11,7 @@ from pushhdc.pyshgp.push.type_library import PushTypeLibrary
 from pushhdc.pyshgp.push.types import PushFloat, PushInt, PushType
 
 
-class HyperVectorType(PushType):
+class HyperVectorType(PushType):  # type: ignore[misc]
     """Push type for bipolar hypervectors."""
 
     def __init__(self) -> None:
@@ -44,7 +44,6 @@ def hdc_type_library(*, register_core: bool = False) -> PushTypeLibrary:
 def hdc_instruction_set(*, register_core: bool = True) -> InstructionSet:
     """Instruction set with HDC ops and matching core stack generics."""
     type_library = hdc_type_library(register_core=False)
-    return (
-        InstructionSet(type_library=type_library, register_core=register_core)
-        .register_list(hdc_instructions())
-    )
+    return InstructionSet(
+        type_library=type_library, register_core=register_core
+    ).register_list(hdc_instructions())

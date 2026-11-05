@@ -12,6 +12,7 @@ TODO: later candidates from the original stub list
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from typing import Any, cast
 
 import numpy as np
 
@@ -27,7 +28,7 @@ from pushhdc.pyshgp.push.type_library import RESERVED_PSEUDO_STACKS
 from pushhdc.pyshgp.utils import Token
 
 
-class RngAwareInstruction(Instruction):
+class RngAwareInstruction(Instruction):  # type: ignore[misc]
     """Like SimpleInstruction, but passes ``push_config.rng`` into ``f``.
 
     ``f`` must accept the popped stack args plus a keyword-only ``rng``.
@@ -46,7 +47,7 @@ class RngAwareInstruction(Instruction):
     def __init__(
         self,
         name: str,
-        f: Callable,
+        f: Callable[..., Any],
         input_stacks: Sequence[str],
         output_stacks: Sequence[str],
         code_blocks: int,
@@ -65,7 +66,9 @@ class RngAwareInstruction(Instruction):
         if Token.no_stack_item in args:
             return push_state
 
-        config = push_config if push_config is not None else push_state.push_config
+        config = (
+            push_config if push_config is not None else push_state.push_config
+        )
         rng = config.rng
         if rng is None:
             rng = np.random.default_rng()
@@ -80,7 +83,8 @@ class RngAwareInstruction(Instruction):
         return push_state
 
     def required_stacks(self) -> set[str]:
-        return set(self.input_stacks + self.output_stacks) - RESERVED_PSEUDO_STACKS
+        stacks = set(self.input_stacks) | set(self.output_stacks)
+        return stacks - cast(set[str], set(RESERVED_PSEUDO_STACKS))
 
 
 def _hv_bind(a: HyperVector, b: HyperVector) -> tuple[HyperVector]:
