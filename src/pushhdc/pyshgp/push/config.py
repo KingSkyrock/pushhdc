@@ -34,6 +34,9 @@ class PushConfig(PRecord):
         Max size of any collection (code blocks, vectors, strings, etc). Default is 1000.
     numeric_magnitude_limit : float, optional
         Max magnitude of numbers. Default is 1 million.
+    rng : object, optional
+        Optional NumPy Generator (or compatible) for stochastic instructions
+        such as hypervector bundling. Default is None.
 
     """
 
@@ -42,7 +45,7 @@ class PushConfig(PRecord):
     growth_cap = field(type=int, initial=500, mandatory=True)
     collection_size_cap = field(type=int, initial=1000, mandatory=True)
     numeric_magnitude_limit = field(type=float, initial=1e12, mandatory=True)
-
+    rng = field(initial=None, mandatory=True)
 
 def constrain_collection(config: PushConfig, coll: Sequence) -> Sequence:
     """Constrains the collection to a size that is safe for Push program execution."""
