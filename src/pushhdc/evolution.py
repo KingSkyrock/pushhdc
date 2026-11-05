@@ -1,14 +1,7 @@
-import collections
-import collections.abc
-
-# PyshGP 0.1.8 imports Sequence from collections, where it was removed in Python 3.10.
-if not hasattr(collections, "Sequence"):
-    collections.Sequence = collections.abc.Sequence  # type: ignore[attr-defined]
-
-from pyshgp.push.atoms import CodeBlock, Literal  # type: ignore[import-untyped]
-from pyshgp.push.interpreter import PushInterpreter  # type: ignore[import-untyped]
-from pyshgp.push.program import Program, ProgramSignature  # type: ignore[import-untyped]
-from pyshgp.push.type_library import PushTypeLibrary  # type: ignore[import-untyped]
+from pushhdc.pyshgp.push.atoms import CodeBlock, Literal
+from pushhdc.pyshgp.push.interpreter import PushInterpreter
+from pushhdc.pyshgp.push.program import Program, ProgramSignature
+from pushhdc.pyshgp.push.type_library import PushTypeLibrary
 
 
 def run_pyshgp_smoke_test() -> list[int]:
