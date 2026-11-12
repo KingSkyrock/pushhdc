@@ -50,3 +50,4 @@ ignore = [
     "ARG", # unused arguments are normal for pytest fixtures
     "T20", # print() is fine in tests
 ]
+"experiments/**" = ["T20"]
