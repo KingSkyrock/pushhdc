@@ -8,6 +8,8 @@ class HyperVector:
     Represents a high-dimensional vector.
     """
 
+    __hash__ = None  # type: ignore[assignment]
+
     def __init__(
         self,
         data: np.ndarray | None = None,
@@ -95,6 +97,13 @@ class HyperVector:
             return 0.0
 
         return float(dot_product / (norm_self * norm_other))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, HyperVector):
+            return NotImplemented
+        return self.dimension == other.dimension and np.array_equal(
+            self.data, other.data
+        )
 
     def __repr__(self) -> str:
         return f"HyperVector(dim={self.dimension}, sample={self.data[:5]}...)"
