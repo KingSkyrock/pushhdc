@@ -1,6 +1,5 @@
 """Tests for scoring Push programs as HDC encoders, on tiny made-up data."""
 
-import pickle
 from typing import Any
 
 import numpy as np
@@ -82,19 +81,13 @@ def test_program_with_no_output_scores_zero() -> None:
     assert encoder(a)(genome("hv_bind")) == Fitness(accuracy=0.0, cost=1)
 
 
-def test_genome_encodes_the_same_every_time() -> None:
-    """bundle breaks ties at random, but a genome encodes the same way on
-    every run and after pickling, like in a worker process.
+def test_bundle_adds_hvs() -> None:
+    """`hv_bundle` adds two hvs and keeps the sums.
 
-    fails if the tie-breaking rng is unseeded or carries over between runs,
-    which would give a genome different scores in serial and parallel runs.
+    fails if bundle errors and the interpreter skips it, which leaves the last
+    input as the output, or if it rounds sums back to -1s and 1s.
     """
-    a, b = np.random.default_rng(0).choice([-1.0, 1.0], size=(2, 2, 3, 256))
-    evaluator = encoder(a, b)
-    bundled = genome("input_0", "input_1", "hv_bundle")
-    first, _ = evaluator.encode(bundled)
-    again, _ = evaluator.encode(bundled)
-    in_worker, _ = pickle.loads(pickle.dumps(evaluator)).encode(bundled)
-    assert first is not None
-    np.testing.assert_array_equal(again, first)
-    np.testing.assert_array_equal(in_worker, first)
+    a, b = np.random.default_rng(0).choice([-1.0, 1.0], size=(2, 2, 3, 16))
+    hvs, _ = encoder(a, b).encode(genome("input_0", "input_1", "hv_bundle"))
+    assert hvs is not None
+    assert np.array_equal(hvs, (a + b).sum(axis=1))

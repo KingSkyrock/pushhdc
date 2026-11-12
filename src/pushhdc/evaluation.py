@@ -9,7 +9,6 @@ from pushhdc.evolution import Fitness
 from pushhdc.hypervector import HyperVector
 from pushhdc.push_hdc import hdc_instruction_set
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
-from pushhdc.pyshgp.push.config import PushConfig
 from pushhdc.pyshgp.push.interpreter import PushInterpreter
 from pushhdc.pyshgp.push.program import Program, ProgramSignature
 from pushhdc.pyshgp.utils import Token
@@ -44,7 +43,6 @@ class Evaluator:
             )
         self.inputs = [HyperVector(batch) for batch in inputs]
         self.labels = labels
-        self.seed = seed
         # shuffled in case samples are sorted by class, where one fold could
         # hold most of a class. done once so every genome gets the same folds
         shuffled = np.random.default_rng(seed).permutation(samples)
@@ -74,12 +72,8 @@ class Evaluator:
         """each sample's hv, shaped (samples, dimension), and the program's
         cost, for scoring other splits like test at the end. no hvs if the
         program leaves nothing on the hypervector stack."""
-        # bundle breaks ties at random, so each run gets a fresh seeded rng.
-        # that gives a genome the same score every time and in any worker
         signature = ProgramSignature(
-            arity=len(self.inputs),
-            output_stacks=["hypervector"],
-            push_config=PushConfig(rng=np.random.default_rng(self.seed)),
+            arity=len(self.inputs), output_stacks=["hypervector"]
         )
         program = Program(code=genome_to_code(genome), signature=signature)
         interpreter = PushInterpreter(self.instructions)
