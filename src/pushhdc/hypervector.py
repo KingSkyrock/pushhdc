@@ -51,7 +51,7 @@ class HyperVector:
         if data is not None:
             # Cast input data to int8 for memory efficiency (1 byte per dimension)
             self.data: np.ndarray = data.astype(np.int8)
-            self.dimension: int = self.data.shape[0]
+            self.dimension: int = self.data.shape[-1]
         else:
             if rng is None:
                 raise ValueError("rng is required to make a random hypervector")
@@ -117,7 +117,7 @@ class HyperVector:
         Purpose: Encodes sequence order, position, or syntax structure
         Math: Shifts array elements cyclically using np.roll.
         """
-        permuted_data = np.roll(self.data, shift=shift)
+        permuted_data = np.roll(self.data, shift=shift, axis=-1)
         return HyperVector(data=permuted_data, dimension=self.dimension)
 
     def binarize(self) -> "HyperVector":
