@@ -91,10 +91,8 @@ def _hv_bind(a: HyperVector, b: HyperVector) -> tuple[HyperVector]:
     return (a.bind(b),)
 
 
-def _hv_bundle(
-    a: HyperVector, b: HyperVector, *, rng: np.random.Generator
-) -> tuple[HyperVector]:
-    return (a.bundle(b, rng=rng),)
+def _hv_bundle(a: HyperVector, b: HyperVector) -> tuple[HyperVector]:
+    return (a.bundle(b),)
 
 
 def _hv_permute(hv: HyperVector, shift: int) -> tuple[HyperVector]:
