@@ -15,6 +15,7 @@ Architectural Strategy:
    storing vectors in memory).
 """
 
+import hashlib
 import logging
 
 import numpy as np
@@ -119,17 +120,10 @@ class HyperVector:
         permuted_data = np.roll(self.data, shift=shift)
         return HyperVector(data=permuted_data, dimension=self.dimension)
 
-    def binarize(self, rng: np.random.Generator) -> "HyperVector":
+    def binarize(self) -> "HyperVector":
         """
-        Converts accumulated int8 sums back into clean bipolar {-1, 1} vectors.
-
-        Lifecycle Phase: Output Boundary / Fitness Evaluation / Memory Storage
-        When to Call: Executed before computing similarity or storing a reference vector.
-
-        Thresholds positive sums to 1 and non-positive sums to -1.
-        Seeded Tie-Breaking: Resolves exact zeros (ties where sum == 0)
-        using a deterministic SHA-256 / PRNG seed to guarantee 100%
-        reproducibility across PushGP generations.
+        Converts accumulated int8 sums back into clean bipolar {-1, 1} vectors
+        using a content-derived SHA-256 hash for deterministic tie-breaking.
         """
         # Step 1: Base mapping -> positive sums become 1, zero/negative sums become -1
         bundled_data = np.where(self.data > 0, 1, -1).astype(np.int8)
@@ -138,7 +132,20 @@ class HyperVector:
         zeros = self.data == 0
         if np.any(zeros):
             num_zeros = np.count_nonzero(zeros)
-            # Apply seeded random choice to ensure deterministic tie-breaking
+
+            # --- HASHING LOGIC ---
+            # Convert the vector's raw bytes into a stable cryptographic hash
+            combined_bytes = self.data.tobytes()
+            hash_digest = hashlib.sha256(combined_bytes).digest()
+
+            # Turn the first 8 bytes into a 32-bit integer seed
+            seed = int.from_bytes(hash_digest[:8], byteorder="big") % (2**32)
+
+            # Initialize a localized, deterministic RNG using that content-derived seed
+            rng = np.random.default_rng(seed)
+            # ---------------------
+
+            # Resolve ties unbiasedly (50/50 split)
             bundled_data[zeros] = rng.choice(
                 np.array([-1, 1], dtype=np.int8), size=num_zeros
             )
@@ -193,7 +200,7 @@ if __name__ == "__main__":
     accumulated_hv = bound_hv.bundle(hv3)  # Pure int8 addition
 
     # 2. Output Boundary: Binarize and tie-break only at the very end
-    final_hv = accumulated_hv.binarize(rng)
+    final_hv = accumulated_hv.binarize()  # or accumulated_hv.binarize()
 
     # 3. Test Retrieval / Similarity
     logger.info(
