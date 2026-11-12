@@ -51,6 +51,7 @@ class HyperVector:
         bound_data = self.data * other.data
         return HyperVector(data=bound_data, dimension=self.dimension)
 
+    # Designed to be used with 3 vectors, for 2 vectors we use binding.
     def bundle(
         self, other: "HyperVector", *, rng: np.random.Generator
     ) -> "HyperVector":
