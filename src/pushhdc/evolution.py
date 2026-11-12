@@ -52,10 +52,10 @@ def evolve(
 
     with `workers > 1`, `evaluate` runs in worker processes, so Python has to
     be able to copy it to them, which works for a function or object defined
-    at the top level of a module. rounding accuracy to a multiple of
-    `accuracy_tolerance` lets cost decide between genomes that are about
-    equally accurate. `history` has the best fitness of each generation,
-    starting with the random first one.
+    at the top level of a module. genomes within `accuracy_tolerance` of the
+    best accuracy so far count as tied with it, and cost decides between
+    them. `history` has the best fitness of each generation, starting with
+    the random first one.
     """
     rng = np.random.default_rng(seed)
     umad = get_variation_operator("umad")
@@ -73,10 +73,20 @@ def evolve(
         spawner.spawn_genome(initial_genome_size, rng=rng)
         for _ in range(population_size)
     ]
+    # the tolerance counts from the best accuracy of the whole run. counting
+    # from the current population would let a chain of slightly worse but
+    # cheaper genomes walk accuracy down by more than the tolerance
+    best_accuracy = 0.0
+
+    def rank(scored: Ranked) -> Ranked:
+        nonlocal best_accuracy
+        accuracies = [fitness.accuracy for _, fitness in scored]
+        best_accuracy = max(best_accuracy, *accuracies)
+        return _rank(scored, best_accuracy - accuracy_tolerance)
+
     with _evaluator(evaluate, workers) as evaluate_all:
-        ranked = _rank(
-            list(zip(population, evaluate_all(population), strict=True)),
-            accuracy_tolerance,
+        ranked = rank(
+            list(zip(population, evaluate_all(population), strict=True))
         )
         history = [ranked[0][1]]
         for _ in range(generations):
@@ -84,20 +94,18 @@ def evolve(
                 make_child(ranked) for _ in range(population_size - elites)
             ]
             scored = list(zip(children, evaluate_all(children), strict=True))
-            ranked = _rank(ranked[:elites] + scored, accuracy_tolerance)
+            ranked = rank(ranked[:elites] + scored)
             history.append(ranked[0][1])
 
     best_genome, best_fitness = ranked[0]
     return Result(best_genome, best_fitness, history)
 
 
-# sorts genomes best first, by rounded accuracy and then cost
-def _rank(scored: Ranked, accuracy_tolerance: float) -> Ranked:
+# sorts genomes best first, by accuracy and then cost. every accuracy of at
+# least `good_enough` counts as the same, so cost decides between those genomes
+def _rank(scored: Ranked, good_enough: float) -> Ranked:
     def key(pair: tuple[Any, Fitness]) -> tuple[float, float]:
-        accuracy = pair[1].accuracy
-        if accuracy_tolerance > 0:
-            accuracy = round(accuracy / accuracy_tolerance)
-        return (-accuracy, pair[1].cost)
+        return (-min(pair[1].accuracy, good_enough), pair[1].cost)
 
     return sorted(scored, key=key)
 
