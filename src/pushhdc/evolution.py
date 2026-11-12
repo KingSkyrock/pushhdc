@@ -57,7 +57,7 @@ def evolve(
     elites: int = 2,
     tournament_size: int = 7,
     crossover_rate: float = 0.5,
-    accuracy_tolerance: float = 0.0,
+    accuracy_tolerance: float = 0.02,
     workers: int = 1,
 ) -> Result:
     """evolve genomes toward higher accuracy, then lower cost.
