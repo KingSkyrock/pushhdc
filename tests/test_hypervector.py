@@ -23,6 +23,17 @@ def test_random_hypervector_is_reproducible_with_seed() -> None:
     assert np.array_equal(first.data, again.data)
 
 
+def test_ops_clip_instead_of_wrapping() -> None:
+    """bind and bundle clip big values to the int8 range.
+
+    fails if they wrap around, where 16 * 16 comes out as 0 and 100 + 100 as
+    -56, which would score programs on wrong values.
+    """
+    hv = HyperVector(np.array([16, 100, -100]))
+    assert hv.bind(hv).data.tolist() == [127, 127, 127]
+    assert hv.bundle(hv).data.tolist() == [32, 127, -127]
+
+
 def test_push_program_measures_similarity_of_bound_hv() -> None:
     """a Push program can bind hvs and push their cosine similarity.
 
