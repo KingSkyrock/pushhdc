@@ -6,7 +6,7 @@ Run with `uv run python experiments/splice/evolve.py`.
 import os
 
 import numpy as np
-from dataset import BASES, WINDOWS, load, split
+from dataset import BASES, load, split
 
 from pushhdc.evaluation import Evaluator, centroid_accuracy
 from pushhdc.evolution import evolve
@@ -22,25 +22,29 @@ def main() -> None:
     # train. test stays out until the end
     train, test = split(len(labels))
 
-    # we give evolution the 58 windows of 3 bases as units, so a program only
-    # has to encode one window, and the same program gets reused on all 58.
-    # like the lines in tic-tac-toe, that makes the search much easier, but
-    # evolution can't find a better structure than the one we picked. later we
-    # want it to evolve the units too. the first 3 inputs are the hvs of each
-    # window's first, second and third base, and the 4th is an hv for where the
-    # window starts, which evolution can use or ignore. each is shaped
-    # (sequences, 58 windows, dimension).
+    # each position is a unit. the unit operations let evolution choose how the
+    # positions make groups, for example the n-gram length, the gaps, or the
+    # part of the sequence to use. there are 2 inputs. one is the hv of the
+    # base at each position, and one is the hv of the position. each input has
+    # the shape (sequences, 60 positions, dimension)
     rng = np.random.default_rng(SEED)
     hv = np.array([-1, 1], dtype=np.int8)
     values = rng.choice(hv, size=(len(BASES), DIMENSION))
-    starts = rng.choice(hv, size=(len(WINDOWS), DIMENSION))
-    bases = values[sequences[:, WINDOWS]]
-    inputs = [bases[:, :, i] for i in range(3)]
-    inputs.append(np.broadcast_to(starts, inputs[0].shape))
+    positions = rng.choice(hv, size=(sequences.shape[1], DIMENSION))
+    bases = values[sequences]
+    inputs = [bases, np.broadcast_to(positions, bases.shape)]
 
-    evaluator = Evaluator(inputs, labels, train, seed=SEED)
+    evaluator = Evaluator(inputs, labels, train, seed=SEED, unit_ops=True)
+    # in a sweep with 2 seeds, a tolerance of 0.01 gave the same
+    # cross-validated accuracy as 0.005, and the default of 0.02 gave about
+    # 0.03 less. on one seed, 0.01 also gave a smaller program and a shorter
+    # run
     result = evolve(
-        evaluator.spawner(), evaluator, seed=SEED, workers=os.cpu_count() or 1
+        evaluator.spawner(),
+        evaluator,
+        seed=SEED,
+        accuracy_tolerance=0.01,
+        workers=os.cpu_count() or 1,
     )
 
     hvs, cost = evaluator.encode(result.best_genome)
