@@ -222,3 +222,6 @@ __marimo__/
 # datasets and experimental results
 data/
 results/
+
+# NysHD's code, cloned for the splice NysHD baseline
+/nyshd/
