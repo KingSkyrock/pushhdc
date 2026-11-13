@@ -27,7 +27,7 @@ def genome(*genes: str | int) -> Any:
     return Genome([gene(name) for name in genes])
 
 
-# for tests that only encode, where labels and folds don't matter
+# for tests of one program, where the labels and folds do not matter
 def encoder(*inputs: np.ndarray) -> Evaluator:
     samples = np.arange(len(inputs[0]))
     return Evaluator(inputs, np.zeros(len(samples)), samples, folds=2, seed=0)
