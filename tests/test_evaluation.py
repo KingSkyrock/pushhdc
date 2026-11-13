@@ -91,3 +91,22 @@ def test_bundle_adds_hvs() -> None:
     hvs, _ = encoder(a, b).encode(genome("input_0", "input_1", "hv_bundle"))
     assert hvs is not None
     assert np.array_equal(hvs, (a + b).sum(axis=1))
+
+
+def test_fingerprint_matches_programs_that_encode_alike() -> None:
+    """programs share a fingerprint when they encode samples the same way, and
+    each still gets its own cost.
+
+    fails if the fingerprint depends on anything but the encoding, like the
+    program's cost, or if it misses a difference between encodings.
+    """
+    a, b = np.random.default_rng(0).choice([-1.0, 1.0], size=(2, 3, 4, 16))
+    evaluator = encoder(a, b)
+    plain, plain_cost = evaluator.fingerprint(genome("input_0"))
+    # binds `b` with itself, then leaves `a` on top, so it encodes like `plain`
+    detour, detour_cost = evaluator.fingerprint(
+        genome("input_1", "input_1", "hv_bind", "input_0")
+    )
+    other, _ = evaluator.fingerprint(genome("input_1"))
+    assert plain == detour != other
+    assert (plain_cost, detour_cost) == (0, 1)

@@ -1,5 +1,6 @@
 """Scores Push programs as HDC encoders, for `evolve` to rank."""
 
+import hashlib
 from collections.abc import Sequence
 from typing import Any
 
@@ -50,6 +51,9 @@ class Evaluator:
             (np.setdiff1d(samples, held_out), held_out)
             for held_out in np.array_split(shuffled, folds)
         ]
+        # a few samples for `fingerprint`. in the one run we measured, 64 told
+        # programs apart as well as every sample did
+        self.probes = [HyperVector(batch[shuffled[:64]]) for batch in inputs]
         # an encoder only needs the hv ops, since similarity is the
         # classifier's job. each op costs 1 until we measure real costs
         self.instructions = hdc_instruction_set(register_core=False)
@@ -72,12 +76,29 @@ class Evaluator:
         """each sample's hv, shaped (samples, dimension), and the program's
         cost, for scoring other splits like test at the end. no hvs if the
         program leaves nothing on the hypervector stack."""
+        return self._run(genome, self.inputs)
+
+    def fingerprint(self, genome: Any) -> tuple[bytes, int]:
+        """a key that programs share when they encode a few probe samples the
+        same way, and the program's cost. programs with the same key get the
+        same accuracy, so `evolve` only scores one of them. ones that leave no
+        hv all score 0, so they share an empty key."""
+        hvs, cost = self._run(genome, self.probes)
+        if hvs is None:
+            return b"", cost
+        return hashlib.sha256(hvs.tobytes()).digest(), cost
+
+    # `encode` and `fingerprint` run programs the same way, just on different
+    # samples
+    def _run(
+        self, genome: Any, inputs: list[HyperVector]
+    ) -> tuple[np.ndarray | None, int]:
         signature = ProgramSignature(
-            arity=len(self.inputs), output_stacks=["hypervector"]
+            arity=len(inputs), output_stacks=["hypervector"]
         )
         program = Program(code=genome_to_code(genome), signature=signature)
         interpreter = PushInterpreter(self.instructions)
-        [output] = interpreter.run(program, self.inputs)
+        [output] = interpreter.run(program, inputs)
         if output is Token.no_stack_item:
             return None, interpreter.cost
         return output.data.sum(axis=1), interpreter.cost

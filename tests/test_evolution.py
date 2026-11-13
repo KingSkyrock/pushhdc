@@ -84,6 +84,20 @@ class CheaperButWorse:
         return Fitness(accuracy=1 - self.calls / 1000, cost=-self.calls)
 
 
+# scores like `toy_fitness` and counts the genomes it really scores. every
+# genome gets the same fingerprint, so only the first one needs scoring
+class OneFingerprint:
+    def __init__(self) -> None:
+        self.scored = 0
+
+    def __call__(self, genome: Any) -> Fitness:
+        self.scored += 1
+        return toy_fitness(genome)
+
+    def fingerprint(self, genome: Any) -> tuple[bytes, int]:
+        return b"same", len(genome)
+
+
 # makes genome 0 finish last in parallel. the "genomes" are plain ints
 def slow_first(genome: int) -> Fitness:
     if genome == 0:
@@ -267,3 +281,16 @@ def test_evolve_returns_a_simplified_genome() -> None:
     """
     result = run(accuracy_only, simplification_steps=200)
     assert len(result.best_genome) == 1
+
+
+def test_evolve_scores_each_fingerprint_once() -> None:
+    """with an evaluator that has a `fingerprint`, only one genome per
+    fingerprint gets scored, plus one full run of the genome that comes back.
+
+    fails if `evolve` ignores the fingerprint and scores every genome, or if
+    the score it returns came from the cache instead of a real run.
+    """
+    evaluator = OneFingerprint()
+    result = run(evaluator)
+    assert evaluator.scored == 2
+    assert result.best_fitness == toy_fitness(result.best_genome)
