@@ -28,9 +28,12 @@ def genome(*genes: str | int) -> Any:
 
 
 # for tests that only encode, where labels and folds don't matter
-def encoder(*inputs: np.ndarray) -> Evaluator:
+def encoder(*inputs: np.ndarray, unit_ops: bool = False) -> Evaluator:
     samples = np.arange(len(inputs[0]))
-    return Evaluator(inputs, np.zeros(len(samples)), samples, folds=2, seed=0)
+    labels = np.zeros(len(samples))
+    return Evaluator(
+        inputs, labels, samples, folds=2, seed=0, unit_ops=unit_ops
+    )
 
 
 # Tests
@@ -110,3 +113,51 @@ def test_fingerprint_matches_programs_that_encode_alike() -> None:
     other, _ = evaluator.fingerprint(genome("input_1"))
     assert plain == detour != other
     assert (plain_cost, detour_cost) == (0, 1)
+
+
+def test_shift_units_looks_ahead_and_fills_the_end_with_zeros() -> None:
+    """after a shift of 1, each unit contains the hv of the next unit, and the
+    last unit contains zeros.
+
+    fails if the shift wraps around and joins the end of a sequence to its
+    start, if the shift goes in the wrong direction, or if it does not move
+    the units.
+    """
+    a, b = np.random.default_rng(0).choice([-1.0, 1.0], size=(2, 2, 4, 8))
+    # the bind with `b` shows which units line up. a sum of `a` alone stays
+    # the same when the units move
+    hvs, _ = encoder(a, b, unit_ops=True).encode(
+        genome("input_0", 1, "hv_shift_units", "input_1", "hv_bind")
+    )
+    assert hvs is not None
+    assert np.array_equal(hvs, (a[:, 1:] * b[:, :-1]).sum(axis=1))
+
+
+def test_keep_units_keeps_the_range_between_two_ints_either_way() -> None:
+    """a keep of units 1 to 2 gives the same hvs if either int is on top.
+
+    fails if the operation reads the ints as a start and a count, or reads
+    them in one fixed order. Push makes it easy to use the wrong order. also
+    fails if the range does not include its last unit.
+    """
+    a = np.random.default_rng(0).choice([-1.0, 1.0], size=(2, 4, 8))
+    evaluator = encoder(a, unit_ops=True)
+    for ints in ((1, 2), (2, 1)):
+        hvs, _ = evaluator.encode(genome("input_0", *ints, "hv_keep_units"))
+        assert hvs is not None
+        assert np.array_equal(hvs, a[:, 1:3].sum(axis=1))
+
+
+def test_program_whose_hvs_are_all_zeros_scores_zero() -> None:
+    """a program that sets all units to zero gets a score of 0, the same as a
+    program with no output.
+
+    fails if hvs that are all zero go to the classifier. there, the zero
+    prototypes cause a division by zero, and each guess becomes the first
+    class.
+    """
+    a = np.ones((2, 4, 8))
+    evaluator = encoder(a, unit_ops=True)
+    # a shift of 4 moves all 4 units out, so only zeros stay
+    fitness = evaluator(genome("input_0", 4, "hv_shift_units"))
+    assert fitness == Fitness(accuracy=0.0, cost=1)
