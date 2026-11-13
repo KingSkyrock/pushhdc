@@ -47,6 +47,7 @@ def evolve(
     crossover_rate: float = 0.5,
     accuracy_tolerance: float = 0.02,
     workers: int = 1,
+    simplification_steps: int = 200,
 ) -> Result:
     """evolve genomes toward higher accuracy, then lower cost.
 
@@ -55,7 +56,9 @@ def evolve(
     at the top level of a module. genomes within `accuracy_tolerance` of the
     best accuracy so far count as tied with it, and cost decides between
     them. `history` has the best fitness of each generation, starting with
-    the random first one.
+    the random first one. at the end, the best genome gets simplified by
+    deleting genes that don't help, so `best_fitness` can beat the last entry
+    of `history`.
     """
     rng = np.random.default_rng(seed)
     umad = get_variation_operator("umad")
@@ -97,8 +100,38 @@ def evolve(
             ranked = rank(ranked[:elites] + scored)
             history.append(ranked[0][1])
 
-    best_genome, best_fitness = ranked[0]
+    best_genome, best_fitness = _simplify(
+        *ranked[0], evaluate, simplification_steps, rng
+    )
     return Result(best_genome, best_fitness, history)
+
+
+# makes a genome shorter and easier to read by deleting genes that don't help.
+# it's the automatic simplification of Helmuth et al. (GECCO 2017). pyshgp's
+# `GenomeSimplifier` does the same, but scores genomes its own way instead of
+# with `Fitness`
+def _simplify(
+    genome: Any,
+    fitness: Fitness,
+    evaluate: Evaluate,
+    steps: int,
+    rng: np.random.Generator,
+) -> tuple[Any, Fitness]:
+    for _ in range(steps):
+        if len(genome) <= 1:
+            break
+        count = min(int(rng.integers(1, 4)), len(genome) - 1)
+        deleted = set(rng.choice(len(genome), size=count, replace=False))
+        shorter = Genome(
+            [gene for i, gene in enumerate(genome) if i not in deleted]
+        )
+        shorter_fitness = evaluate(shorter)
+        if (
+            shorter_fitness.accuracy >= fitness.accuracy
+            and shorter_fitness.cost <= fitness.cost
+        ):
+            genome, fitness = shorter, shorter_fitness
+    return genome, fitness
 
 
 # sorts genomes best first, by accuracy and then cost. every accuracy of at

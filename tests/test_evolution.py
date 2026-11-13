@@ -10,12 +10,14 @@ from pushhdc.evolution import (
     Fitness,
     Result,
     _evaluator,
+    _simplify,
     _tournament,
     evolve,
 )
-from pushhdc.pyshgp.gp.genome import GeneSpawner
-from pushhdc.pyshgp.push.atoms import InstructionMeta
+from pushhdc.pyshgp.gp.genome import GeneSpawner, Genome
+from pushhdc.pyshgp.push.atoms import InstructionMeta, Literal
 from pushhdc.pyshgp.push.instruction_set import InstructionSet
+from pushhdc.pyshgp.push.types import PushInt
 
 # Helpers
 
@@ -89,13 +91,38 @@ def slow_first(genome: int) -> Fitness:
     return Fitness(accuracy=genome, cost=0)
 
 
-# a small seeded run. each test passes only the settings it checks
+# a genome of int literals, for tests that only care which genes are left
+def numbers(*values: int) -> Any:
+    return Genome([Literal(value=v, push_type=PushInt) for v in values])
+
+
+# only the 7 matters for accuracy, and every gene costs 1
+def needs_seven(genome: Any) -> Fitness:
+    has_seven = any(gene.value == 7 for gene in genome)
+    return Fitness(accuracy=1.0 if has_seven else 0.5, cost=len(genome))
+
+
+# every genome is equally accurate, but shorter ones cost more
+def shorter_costs_more(genome: Any) -> Fitness:
+    return Fitness(accuracy=1.0, cost=-len(genome))
+
+
+# 200 steps is enough to finish simplifying these small genomes
+def simplified(genome: Any, evaluate: Evaluate) -> tuple[Any, Fitness]:
+    rng = np.random.default_rng(0)
+    return _simplify(genome, evaluate(genome), evaluate, 200, rng)
+
+
+# a small seeded run. each test passes only the settings it checks.
+# simplification is off unless a test turns it on, since it could shrink a
+# wrongly picked best genome and hide a ranking bug
 def run(
     evaluate: Evaluate,
     *,
     workers: int = 1,
     max_genome_length: int = 100,
     accuracy_tolerance: float = 0.0,
+    simplification_steps: int = 0,
 ) -> Result:
     spawner = GeneSpawner(
         n_inputs=1,
@@ -113,6 +140,7 @@ def run(
         max_genome_length=max_genome_length,
         accuracy_tolerance=accuracy_tolerance,
         workers=workers,
+        simplification_steps=simplification_steps,
     )
 
 
@@ -207,3 +235,35 @@ def test_tournament_over_everyone_picks_the_best() -> None:
     ranked = [("best", Fitness(1.0, 0)), ("worst", Fitness(0.0, 9))]
     rng = np.random.default_rng(0)
     assert _tournament(ranked, size=2, rng=rng) == "best"
+
+
+def test_simplify_deletes_only_genes_that_dont_matter() -> None:
+    """simplifying leaves just the genes that accuracy depends on.
+
+    fails if a deletion that lowers accuracy gets kept, or if deletions that
+    change nothing get thrown away.
+    """
+    genome, fitness = simplified(numbers(*range(10)), needs_seven)
+    assert [gene.value for gene in genome] == [7]
+    assert fitness == Fitness(accuracy=1.0, cost=1)
+
+
+def test_simplify_never_raises_cost() -> None:
+    """simplifying keeps a genome when every deletion would cost more.
+
+    fails if only accuracy gets checked, which could swap a program for a
+    shorter but more expensive one.
+    """
+    genome, _ = simplified(numbers(1, 2), shorter_costs_more)
+    assert len(genome) == 2
+
+
+def test_evolve_returns_a_simplified_genome() -> None:
+    """the best genome comes back with the genes that don't help deleted.
+
+    genes cost nothing, so evolution alone leaves the best genome long, and
+    only simplification shrinks it to one gene. fails if `evolve` skips
+    simplification or returns the genome from before it.
+    """
+    result = run(accuracy_only, simplification_steps=200)
+    assert len(result.best_genome) == 1
