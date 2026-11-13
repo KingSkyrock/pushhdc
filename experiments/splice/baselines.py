@@ -53,9 +53,9 @@ def record(
     return bind(positions, values[sequences]).sum(axis=1)
 
 
-# the next three are hand-written stand-ins for evolved programs. each runs the
-# same few ops on every window and bundles the results. this one ignores order,
-# so it only counts how often each base shows up
+# the next three encode each window of 3 bases with the same few ops, then
+# bundle the results. this one ignores order, so it only counts how often each
+# base shows up
 def bundle_each_window(
     sequences: np.ndarray, dimension: int, rng: np.random.Generator
 ) -> np.ndarray:
