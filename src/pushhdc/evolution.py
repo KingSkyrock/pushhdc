@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 
+from pushhdc.dedup import deduplicated
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.gp.variation import Alternation, get_variation_operator
 
@@ -57,8 +58,10 @@ def evolve(
     best accuracy so far count as tied with it, and cost decides between
     them. `history` has the best fitness of each generation, starting with
     the random first one. at the end, the best genome gets simplified by
-    deleting genes that do not help, so `best_fitness` can beat the last
-    entry of `history`.
+    deleting genes that do not help, so `best_fitness` can differ from the
+    last entry of `history`. if `evaluate` has a `fingerprint` method, for
+    example `Evaluator`, genomes that share a fingerprint get scored once
+    (see `pushhdc.dedup`).
     """
     rng = np.random.default_rng(seed)
     umad = get_variation_operator("umad")
@@ -87,7 +90,13 @@ def evolve(
         best_accuracy = max(best_accuracy, *accuracies)
         return _rank(scored, best_accuracy - accuracy_tolerance)
 
-    with _evaluator(evaluate, workers) as evaluate_all:
+    with _evaluator(evaluate, workers) as run_all:
+        fingerprint = getattr(evaluate, "fingerprint", None)
+        evaluate_all = (
+            run_all
+            if fingerprint is None
+            else deduplicated(run_all, fingerprint)
+        )
         ranked = rank(
             list(zip(population, evaluate_all(population), strict=True))
         )
@@ -100,9 +109,18 @@ def evolve(
             ranked = rank(ranked[:elites] + scored)
             history.append(ranked[0][1])
 
-    best_genome, best_fitness = _simplify(
-        *ranked[0], evaluate, simplification_steps, rng
-    )
+        # a deletion that keeps the fingerprint gets the saved accuracy and
+        # skips the full run
+        best_genome, best_fitness = _simplify(
+            *ranked[0],
+            lambda genome: evaluate_all([genome])[0],
+            simplification_steps,
+            rng,
+        )
+        # a shared fingerprint does not prove the same accuracy, so the
+        # returned genome gets a full run for its true score
+        if fingerprint is not None:
+            [best_fitness] = run_all([best_genome])
     return Result(best_genome, best_fitness, history)
 
 
