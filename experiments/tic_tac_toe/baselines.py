@@ -8,6 +8,8 @@ from dataset import LINES, load, split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
+from pushhdc.evaluation import centroid_accuracy
+
 DIMENSIONS = (64, 256, 1024, 4096, 10000)
 SEEDS = range(5)
 
@@ -77,26 +79,10 @@ def bind_each_line_in_order(
 ENCODERS = (record, bundle_each_line, bind_each_line, bind_each_line_in_order)
 
 
-# hdc's simplest classifier. each class gets a prototype, the sum of its
-# training boards, and a board goes to the most similar prototype
-def centroid_accuracy(
-    hvs: np.ndarray, x_won: np.ndarray, train: np.ndarray, test: np.ndarray
-) -> float:
-    prototypes = np.stack(
-        [
-            hvs[train][x_won[train] == label].sum(axis=0)
-            for label in (False, True)
-        ]
-    ).astype(float)
-    prototypes /= np.linalg.norm(prototypes, axis=1, keepdims=True)
-    guesses = (hvs[test] @ prototypes.T).argmax(axis=1).astype(bool)
-    return float((guesses == x_won[test]).mean())
-
-
 def main() -> None:
     boards, x_won = load()
-    # nothing here gets tuned, so the validation split isn't needed
-    train, _, test = split(x_won, seed=0)
+    train, validation, test = split(x_won, seed=0)
+    train = np.concatenate([train, validation])
 
     def row(name: str, accuracies: list[float]) -> None:
         print(f"{name:32}" + "".join(f"{a:8.3f}" for a in accuracies))
