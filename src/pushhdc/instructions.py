@@ -114,13 +114,13 @@ def hdc_instructions() -> list[Instruction]:
             0,
             docstring="Bind (element-wise multiply) the top two hypervectors.",
         ),
-        RngAwareInstruction(
+        SimpleInstruction(
             "hv_bundle",
             _hv_bundle,
             ["hypervector", "hypervector"],
             ["hypervector"],
             0,
-            docstring="Bundle (majority) the top two hypervectors, using PushConfig.rng for ties.",
+            docstring="Bundle (add) the top two hypervectors.",
         ),
         SimpleInstruction(
             "hv_permute",

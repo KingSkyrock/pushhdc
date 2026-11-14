@@ -24,6 +24,14 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+# keeps int8 values from wrapping around, where 100 + 100 comes out as -56
+# with no error and a program gets scored on wrong values. ops work in int16,
+# which fits any sum or product of two int8 values, then clip to -127..127 so
+# negating stays in range
+def _saturate(data: np.ndarray) -> np.ndarray:
+    return data.clip(-127, 127)
+
+
 class HyperVector:
     """
     Represents a high-dimensional hypervector supporting integer-valued
@@ -51,7 +59,7 @@ class HyperVector:
         if data is not None:
             # Cast input data to int8 for memory efficiency (1 byte per dimension)
             self.data: np.ndarray = data.astype(np.int8)
-            self.dimension: int = self.data.shape[0]
+            self.dimension: int = self.data.shape[-1]
         else:
             if rng is None:
                 raise ValueError("rng is required to make a random hypervector")
@@ -77,14 +85,14 @@ class HyperVector:
         Performs Binding (component-wise multiplication).
         Purpose: Associates two concepts (e.g., Role * Value, Feature * Color).
         Math: Multiplies int8 elements (-1 * -1 = 1, 1 * -1 = -1).
-        Results remain strictly within bipolar {-1, 1} bounds.
+        Products of bundled (non-binary) vectors clip to -127..127.
         """
         if self.dimension != other.dimension:
             raise ValueError(
                 "Hypervectors must have the same dimension to bind."
             )
 
-        bound_data = self.data * other.data
+        bound_data = _saturate(self.data.astype(np.int16) * other.data)
         return HyperVector(data=bound_data, dimension=self.dimension)
 
     def bundle(self, other: "HyperVector") -> "HyperVector":
@@ -97,10 +105,7 @@ class HyperVector:
           entirely during intermediate steps, making this a single fast addition.
 
         OVERFLOW LIMIT:
-        Signed int8 holds values between -128 and +127. If bundling pure {-1, 1} vectors,
-        you can safely accumulate up to ~127 additions before hitting integer overflow.
-        If both intermediate vectors hold non-binary sums, this limit can be reached sooner.
-        Recommendation: Monitor the depth of recursive bundling.
+        Sums clip to -127..127 instead of wrapping around.
         """
         if self.dimension != other.dimension:
             raise ValueError(
@@ -108,7 +113,7 @@ class HyperVector:
             )
 
         # Element-wise integer addition (accumulating votes)
-        summed_data = self.data + other.data
+        summed_data = _saturate(self.data.astype(np.int16) + other.data)
         return HyperVector(data=summed_data, dimension=self.dimension)
 
     def permute(self, shift: int = 1) -> "HyperVector":
@@ -117,7 +122,7 @@ class HyperVector:
         Purpose: Encodes sequence order, position, or syntax structure
         Math: Shifts array elements cyclically using np.roll.
         """
-        permuted_data = np.roll(self.data, shift=shift)
+        permuted_data = np.roll(self.data, shift=shift, axis=-1)
         return HyperVector(data=permuted_data, dimension=self.dimension)
 
     def binarize(self) -> "HyperVector":
