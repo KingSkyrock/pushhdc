@@ -81,7 +81,10 @@ ENCODERS = (bag_of_bases, record, kmer_3, kmer_6)
 
 
 def centroid_accuracy(
-    hvs: np.ndarray, is_promoter: np.ndarray, train: np.ndarray, test: np.ndarray
+    hvs: np.ndarray,
+    is_promoter: np.ndarray,
+    train: np.ndarray,
+    test: np.ndarray,
 ) -> float:
     prototypes = np.stack(
         [

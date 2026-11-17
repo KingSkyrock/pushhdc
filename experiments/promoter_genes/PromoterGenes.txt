@@ -57,3 +57,27 @@ K=8	0.818		0.869				3
 K = 6 best Cross-Validated
 K = 8 best Test Accuracy
 K = 3 best Program Cost
+
+
+# Summary
+
+- Added baselines.py, dataset.py, evolve.py
+- Ran baseline and initial evolve on Molecular Biology (Promoter Gene Sequences)
+- Edited script to send data in chunks, K = 3, 6, 8, test results in PromoterGenes.txt
+
+## Process
+
+Initially, the script treated the promoter sequences as a flat, unordered bag of letters, resulting in mediocre scores (~68% test accuracy). I introduced a multi-channel sliding window architecture, slicing the string sequences into overlapping chunks of size K. This gave PushGP multiple parallel input streams (input_0, input_1, etc.), allowing genetic operations (hv_bind, hv_bundle, hv_permute) to combine neighboring nucleotides into meaningful patterns.
+
+This culminating in an 81.8% test accuracy at K = 8. For each k, the code creates a parallel input channel representing positions relative to a sliding frame. K = 3 caughts local triplets, but missed wider struggers. K = 6 hit the length of cirtical bacterial promoter consensus sequences (like the 6-bp Pribnow -10 box, e.g., TATAAT). K = 8 captured slightly wider spacing which smoothed out generalization, but did introduce noise in cross-validation.
+
+## Metrics in .txt file
+
+#### Test Accuracy
+Measures how accurately your evolved program classifies a completely held-out test set of promoter sequences that the evolution loop never saw during training or cross-validation. It proves the evolved program learned general biological rules rather than just memorizing the training data.
+
+#### Cross-Validated Accuracy
+The performance score measured across training and validation folds while the evolutionary algorithm was actively running and selecting fitter programs. It tells the algorithm which mutant programs are worth keeping and breeding.
+
+#### Program Cost
+The instruction length or complexity of the final evolved Push program (e.g., how many operations/constants are in the lisp-like code string). Lower cost means a simpler, more elegant recipe. Evolution naturally penalizes bloated code, so a low cost (like 3 or 4 instructions) combined with high accuracy means PushGP found a concise, highly efficient feature extractor.

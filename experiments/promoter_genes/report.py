@@ -9,7 +9,13 @@ from pathlib import Path
 
 import baselines
 
-RESULTS = Path(__file__).parents[2] / "experiments" / "promoter_genes" / "results" / "promoter_genes.txt"
+RESULTS = (
+    Path(__file__).parents[2]
+    / "experiments"
+    / "promoter_genes"
+    / "results"
+    / "promoter_genes.txt"
+)
 
 
 def main() -> None:
