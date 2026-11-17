@@ -1,0 +1,59 @@
+uv run --with scikit-learn python experiments/promoter_genes/report.py
+
+Initial Baseline
+
+test accuracy
+majority class                     0.500
+logistic regression                0.909
+random forest                      1.000
+
+hdc, by dimension                     64     256    1024    4096   10000
+bag_of_bases                       0.682   0.682   0.682   0.682   0.682
+record                             0.809   0.927   0.873   0.936   0.909
+kmer_3                             0.809   0.845   0.891   0.909   0.891
+kmer_6                             0.782   0.791   0.891   0.955   0.945
+
+Initial Evolve
+
+(pushhdc) PS C:\Users\andre\Github\pushhdc> uv run python experiments/promoter_genes/evolve.py
+(1 1 input_0 hv_permute input_0 input_0 1 hv_permute hv_permute hv_bundle 1 hv_bind)
+cost 5
+cross-validated accuracy 0.690
+test accuracy 0.682
+
+Multi-channel 3-Mer
+
+(pushhdc) PS C:\Users\andre\Github\pushhdc> uv run python experiments/promoter_genes/evolve.py
+Evolved Push Program:
+(input_2 input_2 input_2 1 input_2 input_1 hv_bundle input_1 hv_bind)
+cost 2
+cross-validated accuracy 0.821
+test accuracy 0.727
+
+Multi-channel 6-Mer
+
+(pushhdc) PS C:\Users\andre\Github\pushhdc> uv run python experiments/promoter_genes/evolve.py
+Evolved Push Program:
+(1 input_0 input_1 input_5 input_3 1 input_5 input_3 1 input_0 input_5 hv_bind hv_bind input_4 hv_permute 1 hv_bind)
+cost 4
+cross-validated accuracy 0.893
+test accuracy 0.773
+
+Multi-channel 8-Mer
+
+Evolved Push Program:
+(input_3 input_4 input_5 input_1 1 input_5 input_3 input_7 input_3 input_5 input_1 1 input_2 input_0 input_0 input_0 input_2 input_5 input_6 input_2 input_3 input_6 1 input_5 input_5 input_7 1 input_0 input_3 hv_bind hv_bundle input_5 hv_bind)
+cost 3
+cross-validated accuracy 0.869
+test accuracy 0.818
+
+FINAL
+
+Metric	Test Accuracy	Cross-Validated Accuracy	Program Cost
+K=3	0.727		0.821				2
+K=6	0.773		0.893				4
+K=8	0.818		0.869				3
+
+K = 6 best Cross-Validated
+K = 8 best Test Accuracy
+K = 3 best Program Cost
