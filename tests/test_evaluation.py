@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from pushhdc.evaluation import Evaluator, Lookup
+from pushhdc.evaluation import Evaluator, Lookup, centroid_accuracy
 from pushhdc.evolution import Fitness
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.push.atoms import Input, InstructionMeta, Literal
@@ -184,15 +184,28 @@ def test_program_whose_hvs_are_all_zeros_scores_zero() -> None:
     """a program that sets all units to zero gets a score of 0, the same as a
     program with no output.
 
-    fails if hvs that are all zero go to the classifier. there, the zero
-    prototypes cause a division by zero, and each guess becomes the first
-    class.
+    fails if hvs that are all zero go to the classifier. there, each guess
+    becomes the first class.
     """
     a = np.ones((2, 4, 8))
     evaluator = encoder(a, unit_ops=True)
     # a shift of 4 moves all 4 units out, so only zeros stay
     fitness = evaluator(genome("input_0", 4, "hv_shift_units"))
     assert fitness == Fitness(accuracy=0.0, cost=0)
+
+
+def test_a_class_whose_train_hvs_are_all_zero_can_be_guessed() -> None:
+    """a class whose train hvs are all zero gets a prototype that every sample
+    is 0 similar to, so a sample that is less like the other classes goes to
+    that class.
+
+    fails if the zero prototype divides by zero. then every guess becomes that
+    class.
+    """
+    hvs = np.array([[1, 1], [1, 1], [0, 0], [0, 0], [1, 1], [-1, -1]])
+    labels = np.array([0, 0, 1, 1, 0, 1])
+    accuracy = centroid_accuracy(hvs, labels, np.arange(4), np.array([4, 5]))
+    assert accuracy == 1.0
 
 
 def test_a_shared_input_scores_like_a_copied_one() -> None:

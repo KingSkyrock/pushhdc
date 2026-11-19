@@ -251,8 +251,7 @@ class Evaluator:
 
     def __call__(self, genome: Any) -> Fitness:
         hvs, cost = self.encode(genome)
-        # hvs that are all zero contain no information. they also cause a
-        # division by zero in the prototypes
+        # hvs that are all zero contain no information
         if hvs is None or not hvs.any():
             return Fitness(accuracy=0.0, cost=cost)
         accuracies = [
@@ -274,7 +273,10 @@ def centroid_accuracy(
     prototypes = np.stack(
         [hvs[train][labels[train] == label].sum(axis=0) for label in classes]
     ).astype(float)
-    prototypes /= np.linalg.norm(prototypes, axis=1, keepdims=True)
+    # a class whose train hvs are all zero has no direction. its prototype
+    # stays zero, so every sample is 0 similar to it
+    norms = np.linalg.norm(prototypes, axis=1, keepdims=True)
+    prototypes /= np.where(norms == 0, 1, norms)
     guesses = classes[(hvs[test] @ prototypes.T).argmax(axis=1)]
     return float((guesses == labels[test]).mean())
 
