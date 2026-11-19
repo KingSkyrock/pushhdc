@@ -21,7 +21,6 @@ SEED = 0
 # the choice
 CHOICE_CODEBOOKS = range(200, 208)
 REPORT_CODEBOOKS = range(100, 105)
-CHOICE_TOLERANCE = 0.005
 
 
 def main() -> None:
@@ -46,19 +45,15 @@ def main() -> None:
         return Evaluator(inputs, labels, train, seed=codebook, unit_ops=True)
 
     evolution = evaluator(SEED)
-    # a smaller tolerance than the default, so that real gains in accuracy
-    # do not count as ties
     result = evolve(
         evolution.spawner(),
         evolution,
         seed=SEED,
-        accuracy_tolerance=0.01,
         workers=os.cpu_count() or 1,
     )
     genome, fitness = choose(
         result.finalists,
         (evaluator(codebook) for codebook in CHOICE_CODEBOOKS),
-        accuracy_tolerance=CHOICE_TOLERANCE,
     )
 
     cross_validated, tested = [], []

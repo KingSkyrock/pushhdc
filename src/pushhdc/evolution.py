@@ -48,7 +48,7 @@ def evolve(
     elites: int = 2,
     tournament_size: int = 7,
     crossover_rate: float = 0.5,
-    accuracy_tolerance: float = 0.02,
+    accuracy_tolerance: float = 0.01,
     workers: int = 1,
     simplification_steps: int = 200,
     finalist_window: float = 0.02,
@@ -163,7 +163,7 @@ def choose(
     finalists: Ranked,
     evaluators: Iterable[Evaluate],
     *,
-    mean_tolerance: float,
+    mean_tolerance: float = 0.005,
 ) -> tuple[Any, Fitness]:
     """the cheapest finalist whose mean accuracy over `evaluators` is within
     `mean_tolerance` of the best mean, with that mean as its accuracy.
