@@ -1,12 +1,25 @@
 """Baselines for promoter gene sequences, to compare evolved encoders against.
 
 Run with `uv run --with scikit-learn python experiments/promoter_genes/baselines.py`.
+The NysHD row needs a clone of NysHD's code in `nyshd/` at the top of this
+repo. Their code is at
+https://github.com/QuanlingZhao/AAAI-25-Bridging-the-Gap-Between-HDC-and-Kernel-Methods-via-the-Nystrom-Method
 """
 
+import sys
+from functools import partial
+from pathlib import Path
+
 import numpy as np
-from dataset import load, split
+from dataset import NUCLEOTIDES, load, split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+
+from pushhdc.evaluation import centroid_accuracy
+
+# the string experiments share `nyshd.py`, which is in `experiments/`
+sys.path.append(str(Path(__file__).parents[1]))
+import nyshd
 
 DIMENSIONS = (64, 256, 1024, 4096, 10000)
 SEEDS = range(5)
@@ -80,23 +93,6 @@ def kmer_6(
 ENCODERS = (bag_of_bases, record, kmer_3, kmer_6)
 
 
-def centroid_accuracy(
-    hvs: np.ndarray,
-    is_promoter: np.ndarray,
-    train: np.ndarray,
-    test: np.ndarray,
-) -> float:
-    prototypes = np.stack(
-        [
-            hvs[train][is_promoter[train] == label].sum(axis=0)
-            for label in (False, True)
-        ]
-    ).astype(float)
-    prototypes /= np.linalg.norm(prototypes, axis=1, keepdims=True)
-    guesses = (hvs[test] @ prototypes.T).argmax(axis=1).astype(bool)
-    return float((guesses == is_promoter[test]).mean())
-
-
 def main() -> None:
     sequences, is_promoter = load()
     # nothing here gets tuned, so a validation split is not needed
@@ -106,7 +102,10 @@ def main() -> None:
         print(f"{name:32}" + "".join(f"{a:8.3f}" for a in accuracies))
 
     print("test accuracy")
-    majority_acc = max(is_promoter[test].mean(), (~is_promoter[test]).mean())
+    # the most common class in train, so the test labels play no part in the
+    # choice. a tie goes to the first class
+    counts = np.bincount(is_promoter[train])
+    majority_acc = (is_promoter[test] == counts.argmax()).mean()
     row("majority class", [float(majority_acc)])
 
     one_hot = np.eye(NUM_NUCLEOTIDES)[sequences].reshape(len(sequences), -1)
@@ -119,15 +118,30 @@ def main() -> None:
         row(name, [float(model.score(one_hot[test], is_promoter[test]))])
 
     print(f"\n{'hdc, by dimension':32}" + "".join(f"{d:8}" for d in DIMENSIONS))
-    for encode in ENCODERS:
+    encoders = [
+        (encode.__name__, partial(encode, sequences)) for encode in ENCODERS
+    ]
+    # NysHD picks its landmarks and its kernel setting from train, so it needs
+    # to know the split. their code's setting for promoter is (2, 1, False).
+    # their code only knows the DNA letters as capitals
+    strings = ["".join(NUCLEOTIDES.upper()[n] for n in s) for s in sequences]
+    kernels = nyshd.kernels(strings, 0, nyshd.settings(3))
+    encode_nyshd, setting = nyshd.with_chosen_setting(
+        kernels, is_promoter, train
+    )
+    encoders.append(("nyshd", encode_nyshd))
+    for name, encode in encoders:
         accuracies = []
         for dimension in DIMENSIONS:
             runs = []
             for seed in SEEDS:
-                hvs = encode(sequences, dimension, np.random.default_rng(seed))
+                hvs = encode(dimension, np.random.default_rng(seed))
                 runs.append(centroid_accuracy(hvs, is_promoter, train, test))
             accuracies.append(float(np.mean(runs)))
-        row(encode.__name__, accuracies)
+        row(name, accuracies)
+    print("\nnyshd kernel setting (k, g, apart), picked on train")
+    for dimension in DIMENSIONS:
+        print(f"{dimension:8}  {setting(dimension)}")
 
 
 if __name__ == "__main__":
