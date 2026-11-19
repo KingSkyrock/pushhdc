@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 import numpy as np
+import pytest
 
 from pushhdc.evolution import (
     Evaluate,
@@ -63,6 +64,24 @@ class Recorder:
         fitness = self.evaluate(genome)
         self.seen.append((len(genome), fitness))
         return fitness
+
+
+# stands in for `Kernel`. genomes of the same length do the same thing
+class LengthAsKernel:
+    def __init__(self, length: int) -> None:
+        self.length = length
+
+    def alignment(self, other: "LengthAsKernel") -> float:
+        return float(self.length == other.length)
+
+
+# a toy evaluator with kernels, so that clearing can change the ranks
+class ToyWithKernels:
+    def __call__(self, genome: Any) -> Fitness:
+        return toy_fitness(genome)
+
+    def kernel(self, genome: Any) -> LengthAsKernel:
+        return LengthAsKernel(len(genome))
 
 
 # makes children always lose to their parents, leaving elitism as the only way
@@ -137,7 +156,8 @@ def simplified(genome: Any, evaluate: Evaluate) -> tuple[Any, Fitness]:
 
 # a small seeded run. each test passes only the settings it checks.
 # simplification is off unless a test turns it on, since it could shrink a
-# wrongly picked best genome and hide a ranking bug
+# wrongly picked best genome and hide a ranking bug. clearing is off too,
+# since the toy evaluators have no kernel
 def run(
     evaluate: Evaluate,
     *,
@@ -146,6 +166,7 @@ def run(
     accuracy_tolerance: float = 0.0,
     simplification_steps: int = 0,
     finalist_window: float = 0.02,
+    niche_similarity: float | None = None,
 ) -> Result:
     spawner = GeneSpawner(
         n_inputs=1,
@@ -165,6 +186,7 @@ def run(
         workers=workers,
         simplification_steps=simplification_steps,
         finalist_window=finalist_window,
+        niche_similarity=niche_similarity,
     )
 
 
@@ -377,3 +399,27 @@ def test_choose_takes_the_cheapest_close_to_the_best_mean() -> None:
         "costly",
         Fitness(0.90, 3),
     )
+
+
+def test_clearing_runs_only_when_it_is_on() -> None:
+    """with kernels from `evaluate`, clearing changes the run, and
+    `niche_similarity=None` turns it off.
+
+    fails if clearing does not change the ranks, or if none does not turn it
+    off.
+    """
+    on = run(ToyWithKernels(), niche_similarity=0.8)
+    off = run(ToyWithKernels())
+    assert on != off
+    assert off == run(toy_fitness)
+
+
+def test_clearing_without_a_kernel_warns() -> None:
+    """`evolve` warns when clearing is on but `evaluate` has no `kernel`
+    method.
+
+    fails if `evolve` runs without clearing and gives no warning, which
+    changes the search with no sign of it.
+    """
+    with pytest.warns(UserWarning, match="no `kernel` method"):
+        run(toy_fitness, niche_similarity=0.8)

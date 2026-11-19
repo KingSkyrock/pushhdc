@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 
+from pushhdc.clearing import Kernel
 from pushhdc.evolution import Fitness
 from pushhdc.hypervector import HyperVector
 from pushhdc.push_hdc import hdc_instruction_set
@@ -60,8 +61,8 @@ class Evaluator:
             (np.setdiff1d(samples, held_out), held_out)
             for held_out in np.array_split(shuffled, folds)
         ]
-        # a few samples for `fingerprint`, which makes it much cheaper than a
-        # full run
+        # a few samples for `fingerprint` and `kernel`, which makes them much
+        # cheaper than a full run
         self.probes = [
             HyperVector(batch if len(batch) == 1 else batch[shuffled[:64]])
             for batch in inputs
@@ -128,8 +129,15 @@ class Evaluator:
             return b"", cost
         return hashlib.sha256(hvs.tobytes()).digest(), cost
 
-    # `encode` and `fingerprint` run programs the same way, just on different
-    # samples
+    def kernel(self, genome: Any) -> Kernel | None:
+        """how alike the program makes each pair of probe samples, for
+        `evolve` to tell programs apart by. none if the program tells no
+        probes apart."""
+        hvs, _ = self._run(genome, self.probes)
+        return None if hvs is None else Kernel.of(hvs)
+
+    # `encode`, `fingerprint` and `kernel` run programs the same way, just on
+    # different samples
     def _run(
         self, genome: Any, inputs: list[HyperVector]
     ) -> tuple[np.ndarray | None, int]:

@@ -1,5 +1,6 @@
 """Evolutionary search over Push genomes."""
 
+import warnings
 from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from pushhdc.clearing import clear
 from pushhdc.dedup import deduplicated
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.gp.variation import Alternation, get_variation_operator
@@ -52,6 +54,7 @@ def evolve(
     workers: int = 1,
     simplification_steps: int = 200,
     finalist_window: float = 0.02,
+    niche_similarity: float | None = 0.8,
 ) -> Result:
     """evolve genomes toward higher accuracy, then lower cost.
 
@@ -70,6 +73,13 @@ def evolve(
     run that come within `finalist_window` of the best accuracy, simplified
     like the best genome. one evaluator makes some genomes look better than
     they are, so `choose` can score them again with other evaluators.
+
+    to keep new ideas alive as parents while they still score low, a genome
+    that does the same thing as a better genome goes behind the genomes that
+    do something new (see `pushhdc.clearing`). two genomes do the same thing,
+    and are in the same niche, when their kernels align at least
+    `niche_similarity`. this needs a `kernel` method on `evaluate`, for
+    example the one on `Evaluator`. `niche_similarity=None` turns it off.
     """
     rng = np.random.default_rng(seed)
     umad = get_variation_operator("umad")
@@ -92,13 +102,24 @@ def evolve(
     # cheaper genomes walk accuracy down by more than the tolerance
     best_accuracy = 0.0
     best_at_each_cost: dict[float, Ranked] = {}
+    kernel = getattr(evaluate, "kernel", None)
+    if niche_similarity is not None and kernel is None:
+        warnings.warn(
+            "`evaluate` has no `kernel` method, so `evolve` runs without "
+            "clearing. pass `niche_similarity=None` to turn clearing off.",
+            stacklevel=2,
+        )
 
     def rank(scored: Ranked) -> Ranked:
         nonlocal best_accuracy
         accuracies = [fitness.accuracy for _, fitness in scored]
         best_accuracy = max(best_accuracy, *accuracies)
         _keep_best_at_each_cost(best_at_each_cost, scored)
-        return _rank(scored, best_accuracy - accuracy_tolerance)
+        ranked = _rank(scored, best_accuracy - accuracy_tolerance)
+        if niche_similarity is None or kernel is None:
+            return ranked
+        kernels = [kernel(genome) for genome, _ in ranked]
+        return clear(ranked, kernels, niche_similarity)
 
     with _evaluator(evaluate, workers) as run_all:
         fingerprint = getattr(evaluate, "fingerprint", None)
