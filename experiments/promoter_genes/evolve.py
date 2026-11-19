@@ -1,4 +1,4 @@
-"""Evolves a multi-channel sequence encoder for promoter gene sequences.
+"""Evolves an encoder for promoter gene sequences and reports its test accuracy.
 
 Run with `uv run python experiments/promoter_genes/evolve.py`.
 """
@@ -9,58 +9,70 @@ import numpy as np
 from dataset import load, split
 
 from pushhdc.evaluation import Evaluator, centroid_accuracy
-from pushhdc.evolution import evolve
+from pushhdc.evolution import choose, evolve
 from pushhdc.pyshgp.gp.genome import genome_to_code
 
 DIMENSION = 256
 SEED = 0
 NUM_NUCLEOTIDES = 4  # a, c, g, t
-K = 8  # Sliding 3-mer window size (e.g., codons/motifs)
+# evolution uses one set of random hvs, the codebook. it makes each program
+# look a little better or worse than it is, and evolution favors the programs
+# that look better. so the finalists get scored again on new codebooks, and
+# the chosen program gets reported on other codebooks that played no part in
+# the choice
+CHOICE_CODEBOOKS = range(200, 208)
+REPORT_CODEBOOKS = range(100, 105)
 
 
 def main() -> None:
     sequences, is_promoter = load()
-    train, validation, test = split(is_promoter, seed=SEED)
-    seen = np.concatenate([train, validation])
+    # cross-validation does a validation split's job, so evolution sees all of
+    # train. test stays out until the end
+    train, test = split(len(is_promoter))
 
-    rng = np.random.default_rng(SEED)
+    # each position is a unit, as in the splice experiment. the unit
+    # operations let evolution choose how the positions make groups, for
+    # example the k-mer length, the gaps, or the part of the sequence to use.
+    # one input is the hv of the nucleotide at each position, shaped
+    # (sequences, positions, dimension). the other is the hv of the position,
+    # which is the same for every sequence, so it is shaped (1, positions,
+    # dimension). the folds change with the codebook too, because a program
+    # can also score high on one set of folds by chance
+    def evaluator(codebook: int) -> Evaluator:
+        rng = np.random.default_rng(codebook)
+        hv = np.array([-1, 1], dtype=np.int8)
+        values = rng.choice(hv, size=(NUM_NUCLEOTIDES, DIMENSION))
+        positions = rng.choice(hv, size=(sequences.shape[1], DIMENSION))
+        inputs = [values[sequences], positions[None]]
+        return Evaluator(
+            inputs, is_promoter, train, seed=codebook, unit_ops=True
+        )
 
-    # 1. Initialize random hypervectors for the 4 nucleotides: shape (4, dimension)
-    values = rng.choice(
-        np.array([-1.0, 1.0], dtype=np.float32),
-        size=(NUM_NUCLEOTIDES, DIMENSION),
-    )
-
-    # Map sequence characters to their hypervectors: shape (samples, 57, dimension)
-    seq_hvs = values[sequences]
-    _num_samples, seq_len, _dim = seq_hvs.shape
-
-    # 2. Multi-channel input preparation:
-    # Instead of 1 flat stream, we create K input streams for a sliding window of size K.
-    # For seq_len = 57 and K = 3, we get 55 sliding units.
-    # inputs[0] = bases at offset 0
-    # inputs[1] = bases at offset 1
-    # inputs[2] = bases at offset 2
-    num_units = seq_len - K + 1
-    inputs = [seq_hvs[:, offset : num_units + offset] for offset in range(K)]
-    # Now `inputs` is a list of 3 arrays, each shaped (samples, 55, dimension).
-    # PushGP can access them as input_0, input_1, and input_2 and bind them together!
-
-    evaluator = Evaluator(inputs, is_promoter, seen, seed=SEED)
+    evolution = evaluator(SEED)
     result = evolve(
-        evaluator.spawner(), evaluator, seed=SEED, workers=os.cpu_count() or 1
+        evolution.spawner(),
+        evolution,
+        seed=SEED,
+        workers=os.cpu_count() or 1,
+    )
+    genome, fitness = choose(
+        result.finalists,
+        (evaluator(codebook) for codebook in CHOICE_CODEBOOKS),
     )
 
-    hvs, cost = evaluator.encode(result.best_genome)
-    assert hvs is not None
+    cross_validated, tested = [], []
+    for codebook in REPORT_CODEBOOKS:
+        report = evaluator(codebook)
+        cross_validated.append(report(genome).accuracy)
+        hvs, _ = report.encode(genome)
+        assert hvs is not None
+        tested.append(centroid_accuracy(hvs, is_promoter, train, test))
 
     print("Evolved Push Program:")
-    print(genome_to_code(result.best_genome).pretty_str())
-    print(f"cost {cost}")
-    print(f"cross-validated accuracy {result.best_fitness.accuracy:.3f}")
-    print(
-        f"test accuracy {centroid_accuracy(hvs, is_promoter, seen, test):.3f}"
-    )
+    print(genome_to_code(genome).pretty_str())
+    print(f"cost {fitness.cost}, chosen from {len(result.finalists)} finalists")
+    print(f"cross-validated accuracy {np.mean(cross_validated):.3f}")
+    print(f"test accuracy {np.mean(tested):.3f}")
 
 
 if __name__ == "__main__":
