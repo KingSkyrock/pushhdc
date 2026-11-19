@@ -1,4 +1,4 @@
-"""Writes the baselines table to `results/tic_tac_toe.txt`.
+"""Writes the baselines and an evolved encoder to `results/tic_tac_toe.txt`.
 
 Run with `uv run --with scikit-learn python experiments/tic_tac_toe/report.py`.
 """
@@ -8,6 +8,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 import baselines
+import evolve
 
 RESULTS = Path(__file__).parents[2] / "results" / "tic_tac_toe.txt"
 
@@ -15,6 +16,8 @@ RESULTS = Path(__file__).parents[2] / "results" / "tic_tac_toe.txt"
 def main() -> None:
     with redirect_stdout(io.StringIO()) as table:
         baselines.main()
+        print(f"\nevolved encoder, dimension {evolve.DIMENSION}")
+        evolve.main()
     RESULTS.parent.mkdir(exist_ok=True)
     RESULTS.write_text(table.getvalue())
     print(f"wrote {RESULTS}")
