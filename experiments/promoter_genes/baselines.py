@@ -99,7 +99,8 @@ def centroid_accuracy(
 
 def main() -> None:
     sequences, is_promoter = load()
-    train, _, test = split(is_promoter, seed=0)
+    # nothing here gets tuned, so a validation split is not needed
+    train, test = split(len(is_promoter))
 
     def row(name: str, accuracies: list[float]) -> None:
         print(f"{name:32}" + "".join(f"{a:8.3f}" for a in accuracies))

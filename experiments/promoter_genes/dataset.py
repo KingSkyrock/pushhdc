@@ -1,5 +1,6 @@
 """Loads the UCI Molecular Biology (Promoter Gene Sequences) dataset and splits it."""
 
+import math
 import urllib.request
 from pathlib import Path
 
@@ -50,20 +51,15 @@ def load() -> tuple[np.ndarray, np.ndarray]:
     )
 
 
-def split(
-    is_promoter: np.ndarray, seed: int
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Stratified train, validation and test indices (60/20/20 mix)."""
-    rng = np.random.default_rng(seed)
-    train, validation, test = [], [], []
-    for label in (True, False):
-        indices = rng.permutation(np.flatnonzero(is_promoter == label))
-        train_end = round(0.6 * len(indices))
-        validation_end = round(0.8 * len(indices))
-        train.extend(indices[:train_end])
-        validation.extend(indices[train_end:validation_end])
-        test.extend(indices[validation_end:])
-    return np.sort(train), np.sort(validation), np.sort(test)
+def split(count: int) -> tuple[np.ndarray, np.ndarray]:
+    """train and test indices, 80/20. this is the split in NysHD's code (Zhao
+    et al., AAAI 2025), so the test sequences are the same as theirs."""
+    # matches scikit-learn's `train_test_split(test_size=0.2, random_state=42)`
+    # on the sequences in file order, as NysHD's code loads them, so
+    # `evolve.py` does not need scikit-learn
+    shuffled = np.random.RandomState(42).permutation(count)
+    test_count = math.ceil(0.2 * count)
+    return np.sort(shuffled[test_count:]), np.sort(shuffled[:test_count])
 
 
 def _download() -> None:
