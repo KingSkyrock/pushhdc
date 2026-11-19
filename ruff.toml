@@ -51,3 +51,4 @@ ignore = [
     "T20", # print() is fine in tests
 ]
 "experiments/**" = ["T20"]
+"scripts/**" = ["T20"]  # print() is fine in CLI scripts

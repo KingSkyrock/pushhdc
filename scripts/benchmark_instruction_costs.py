@@ -1,14 +1,12 @@
 """Microbenchmark HDC ops and assign median-relative integer costs.
 
-Times HyperVector methods backing hdc_instructions() (not Push stack plumbing).
+Times HyperVector methods backing hdc_instructions()
 Costs use: max(1, round(10 * median_i / min_j(median_j))).
 
 Examples:
   uv run python scripts/benchmark_instruction_costs.py
   uv run python scripts/benchmark_instruction_costs.py -n 500 -s 42 -d 10000
 """
-
-from __future__ import annotations
 
 import argparse
 import secrets
@@ -24,6 +22,7 @@ WARMUP_TRIALS = 10
 COST_SCALE = 10
 
 
+# Representation of each operation test case
 @dataclass(frozen=True)
 class OpSpec:
     name: str
@@ -31,13 +30,17 @@ class OpSpec:
     make_args: Callable[[np.random.Generator, int], tuple[object, ...]]
 
 
-def _two_hvs(rng: np.random.Generator, dim: int) -> tuple[HyperVector, HyperVector]:
+# Makes 2 random hvs for bind, bundle, and cosine sim
+def _two_hvs(
+    rng: np.random.Generator, dim: int
+) -> tuple[HyperVector, HyperVector]:
     return (
         HyperVector.random(dimension=dim, rng=rng),
         HyperVector.random(dimension=dim, rng=rng),
     )
 
 
+# Makes 1 random hv for permute
 def _permute_args(
     rng: np.random.Generator, dim: int
 ) -> tuple[HyperVector, int]:
@@ -45,6 +48,7 @@ def _permute_args(
     return (HyperVector.random(dimension=dim, rng=rng), shift)
 
 
+# Table of tested hv operations, add more below as new hv operations are created
 OPS: tuple[OpSpec, ...] = (
     OpSpec("hv_bind", lambda a, b: a.bind(b), _two_hvs),
     OpSpec("hv_bundle", lambda a, b: a.bundle(b), _two_hvs),
@@ -61,6 +65,7 @@ OPS: tuple[OpSpec, ...] = (
 )
 
 
+# Sample and return np array of raw runtimes
 def _time_op(
     op: OpSpec, rng: np.random.Generator, dim: int, n: int
 ) -> np.ndarray:
@@ -77,10 +82,11 @@ def _time_op(
     return samples
 
 
+# Use np array of raw runtimes to calculate respective weighted cost
 def _weighted_costs(medians: dict[str, float]) -> dict[str, int]:
     min_median = min(medians.values())
     if min_median <= 0:
-        return {name: COST_SCALE for name in medians}
+        return dict.fromkeys(medians, COST_SCALE)
     return {
         name: max(1, round(COST_SCALE * median / min_median))
         for name, median in medians.items()
@@ -130,7 +136,7 @@ def main() -> None:
     seed = args.seed if args.seed is not None else secrets.randbits(32)
     rng = np.random.default_rng(seed)
 
-    means: dict[str, float] = {}
+    means: dict[str, float] = {}  # Used for diagnosis only
     medians: dict[str, float] = {}
     for op in OPS:
         samples = _time_op(op, rng, args.dim, args.n)
