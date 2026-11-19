@@ -67,7 +67,7 @@ class Evaluator:
             for batch in inputs
         ]
         # an encoder only needs the hv ops, since similarity is the
-        # classifier's job. each op costs 1 until we measure real costs
+        # classifier's job
         self.instructions = hdc_instruction_set(register_core=False)
         self.instructions.unregister("hv_cosine_sim")
         self.unit_ops = unit_ops
@@ -76,9 +76,15 @@ class Evaluator:
             # a program can use one result more than one time, and does not
             # have to make it again
             self.instructions.register_core_by_name("hypervector_dup$")
+        # every op that does arithmetic has the same cost
         for instruction in self.instructions.values():
             instruction.cost = 1
+        # ops that only move data or leave units out have no cost, because
+        # hardware does them with wiring and no arithmetic
+        self.instructions["hv_permute"].cost = 0
         if unit_ops:
+            self.instructions["hv_shift_units"].cost = 0
+            self.instructions["hv_keep_units"].cost = 0
             # a copy of an hv has no cost, because hardware can use the same hv
             # again
             self.instructions["hypervector_dup"].cost = 0

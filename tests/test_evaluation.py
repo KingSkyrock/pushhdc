@@ -43,8 +43,8 @@ def test_encoding_permutes_each_hv_and_bundles_units() -> None:
     """a program runs over every unit, then each sample's units get bundled.
 
     fails if inputs get mixed up, if permute shifts values between samples or
-    units instead of within each hv, if the wrong axis gets bundled, or if the
-    ops cost nothing.
+    units instead of within each hv, if the wrong axis gets bundled, if bind
+    costs nothing, or if permute has a cost.
     """
     a, b = np.random.default_rng(0).choice([-1.0, 1.0], size=(2, 3, 4, 16))
     hvs, cost = encoder(a, b).encode(
@@ -52,7 +52,7 @@ def test_encoding_permutes_each_hv_and_bundles_units() -> None:
     )
     assert hvs is not None
     assert np.array_equal(hvs, (a * np.roll(b, 1, axis=-1)).sum(axis=1))
-    assert cost == 2
+    assert cost == 1
 
 
 def test_each_sample_is_scored_without_its_own_fold() -> None:
@@ -161,7 +161,7 @@ def test_program_whose_hvs_are_all_zeros_scores_zero() -> None:
     evaluator = encoder(a, unit_ops=True)
     # a shift of 4 moves all 4 units out, so only zeros stay
     fitness = evaluator(genome("input_0", 4, "hv_shift_units"))
-    assert fitness == Fitness(accuracy=0.0, cost=1)
+    assert fitness == Fitness(accuracy=0.0, cost=0)
 
 
 def test_a_shared_input_scores_like_a_copied_one() -> None:
