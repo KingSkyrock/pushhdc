@@ -22,6 +22,53 @@ from pushhdc.units import unit_instructions
 type SameLength = tuple[np.ndarray, list[HyperVector]]
 
 
+class Lookup:
+    """an input given as one hv for each symbol and the symbol at each unit,
+    so nobody has to build the padded (samples, units, dimension) array.
+
+    unit u of sample i is `hvs[symbols[i, u]]`. `hvs` has one row for each
+    symbol, and `symbols` is shaped (samples, units), or (1, units) for an
+    input that every sample shares. the evaluator makes each unit's hv when it
+    cuts its inputs, and with `lengths` it makes only the units within each
+    length. the padded array holds a copy of a symbol's hv at each unit up to
+    the longest sample, so it can be much bigger than the hvs and symbols.
+    the symbols past each length are never read, but each must still pick
+    an hv, for example 0.
+    """
+
+    # `Evaluator` reads an input as it reads an array, by `ndim`, `shape`,
+    # `len` and cuts
+    ndim = 3
+
+    def __init__(self, hvs: np.ndarray, symbols: np.ndarray) -> None:
+        hvs, symbols = np.asarray(hvs), np.asarray(symbols)
+        if hvs.ndim != 2 or symbols.ndim != 2:
+            raise ValueError(
+                "hvs must have one row for each symbol, and symbols must be "
+                "shaped (samples, units)"
+            )
+        # numpy would take -1 as the last hv with no error
+        if not np.issubdtype(symbols.dtype, np.integer) or (
+            symbols.size > 0
+            and (symbols.min() < 0 or symbols.max() >= len(hvs))
+        ):
+            raise ValueError(
+                f"symbols must pick one of the {len(hvs)} hvs, so they must be "
+                f"whole numbers from 0 to {len(hvs) - 1}"
+            )
+        self.hvs = hvs
+        self.symbols = symbols
+        self.shape = (*symbols.shape, hvs.shape[1])
+
+    def __len__(self) -> int:
+        return len(self.symbols)
+
+    # the evaluator reads an input in cuts of samples and units, so only the
+    # hvs of those units get made
+    def __getitem__(self, key: Any) -> np.ndarray:
+        return np.asarray(self.hvs[self.symbols[key]])
+
+
 class Evaluator:
     """scores a genome as an encoder, by cross-validated accuracy and cost.
 
@@ -36,6 +83,10 @@ class Evaluator:
     an input that is the same for every sample, for example the hv of each
     position, can have 1 in place of the number of samples. it then uses less
     memory and makes programs faster, and the scores do not change.
+
+    an input can also be a `Lookup`, one hv for each symbol and the symbol at
+    each unit. then the padded array never gets made, and the scores are the
+    same as with it.
 
     `lengths` gives the number of units of each sample in `inputs`, the test
     samples too. sample i then has only its first `lengths[i]` units in each
@@ -52,7 +103,7 @@ class Evaluator:
 
     def __init__(
         self,
-        inputs: Sequence[np.ndarray],
+        inputs: Sequence[np.ndarray | Lookup],
         labels: np.ndarray,
         samples: np.ndarray,
         *,
@@ -232,7 +283,7 @@ def centroid_accuracy(
 # each of their inputs to that length. an input that all samples share keeps
 # its one row. the array of each length says where its samples are in `rows`
 def _by_length(
-    inputs: Sequence[np.ndarray], lengths: np.ndarray, rows: np.ndarray
+    inputs: Sequence[np.ndarray | Lookup], lengths: np.ndarray, rows: np.ndarray
 ) -> list[SameLength]:
     out = []
     for length in np.unique(lengths[rows]):
