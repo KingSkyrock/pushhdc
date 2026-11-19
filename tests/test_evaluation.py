@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from pushhdc.evaluation import Evaluator
+from pushhdc.evaluation import Evaluator, Lookup
 from pushhdc.evolution import Fitness
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.push.atoms import Input, InstructionMeta, Literal
@@ -29,7 +29,7 @@ def genome(*genes: str | int) -> Any:
 
 # for tests of one program, where the labels and folds do not matter
 def encoder(
-    *inputs: np.ndarray,
+    *inputs: np.ndarray | Lookup,
     unit_ops: bool = False,
     lengths: np.ndarray | None = None,
 ) -> Evaluator:
@@ -239,6 +239,48 @@ def test_each_sample_encodes_as_if_alone() -> None:
             assert alone_hvs is not None
             assert np.array_equal(hvs[i], alone_hvs[0])
             assert cost == alone_cost
+
+
+def test_a_lookup_input_scores_like_the_array_it_stands_for() -> None:
+    """a `Lookup` gives the same hvs, cost and fingerprint as the array of
+    each unit's hv, for samples of many lengths and for a shared `Lookup`.
+
+    fails if a cut takes the wrong samples or units, if `shape` gives the
+    wrong number of units, or if a `Lookup` with one row is not cut as a
+    shared input.
+    """
+    rng = np.random.default_rng(0)
+    letters = rng.choice([-1, 1], size=(5, 16))
+    symbols = rng.integers(0, 5, size=(6, 8))
+    places = rng.choice([-1, 1], size=(8, 16))
+    _, _, lengths = samples_of_many_lengths()
+    looked_up = encoder(
+        Lookup(letters, symbols),
+        Lookup(places, np.arange(8)[None]),
+        unit_ops=True,
+        lengths=lengths,
+    )
+    arrays = encoder(
+        letters[symbols], places[None], unit_ops=True, lengths=lengths
+    )
+    assert Lookup(letters, symbols).shape == letters[symbols].shape
+    for program in PROGRAMS_FOR_LENGTHS:
+        hvs, cost = looked_up.encode(program)
+        array_hvs, array_cost = arrays.encode(program)
+        assert hvs is not None
+        assert array_hvs is not None
+        assert np.array_equal(hvs, array_hvs)
+        assert cost == array_cost
+        assert looked_up.fingerprint(program) == arrays.fingerprint(program)
+
+
+def test_lookup_rejects_symbols_below_zero() -> None:
+    """a symbol below 0 raises an error.
+
+    fails if -1 picks the last hv with no error, as numpy indexing does.
+    """
+    with pytest.raises(ValueError, match="symbols must pick one of"):
+        Lookup(np.ones((3, 4)), np.array([[0, -1]]))
 
 
 def test_padding_does_not_change_fingerprints() -> None:
