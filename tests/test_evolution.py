@@ -8,10 +8,13 @@ import numpy as np
 from pushhdc.evolution import (
     Evaluate,
     Fitness,
+    Ranked,
     Result,
     _evaluator,
+    _keep_best_at_each_cost,
     _simplify,
     _tournament,
+    choose,
     evolve,
 )
 from pushhdc.pyshgp.gp.genome import GeneSpawner, Genome
@@ -121,6 +124,11 @@ def shorter_costs_more(genome: Any) -> Fitness:
     return Fitness(accuracy=1.0, cost=-len(genome))
 
 
+# an evaluator that gives each named genome a set accuracy
+def scores(**accuracy: float) -> Evaluate:
+    return lambda genome: Fitness(accuracy=accuracy[genome], cost=0)
+
+
 # enough steps to finish simplifying these small genomes
 def simplified(genome: Any, evaluate: Evaluate) -> tuple[Any, Fitness]:
     rng = np.random.default_rng(0)
@@ -137,6 +145,7 @@ def run(
     max_genome_length: int = 100,
     accuracy_tolerance: float = 0.0,
     simplification_steps: int = 0,
+    finalist_window: float = 0.02,
 ) -> Result:
     spawner = GeneSpawner(
         n_inputs=1,
@@ -155,6 +164,7 @@ def run(
         accuracy_tolerance=accuracy_tolerance,
         workers=workers,
         simplification_steps=simplification_steps,
+        finalist_window=finalist_window,
     )
 
 
@@ -294,3 +304,76 @@ def test_evolve_scores_each_fingerprint_once() -> None:
     result = run(evaluator)
     assert evaluator.scored == 2
     assert result.best_fitness == toy_fitness(result.best_genome)
+
+
+def test_finalists_keep_the_best_few_at_each_cost() -> None:
+    """the most accurate few genomes at each cost get kept, also at a cost
+    where a cheaper genome is more accurate.
+
+    fails if only the best genome at each cost is kept, if a copy with the
+    same accuracy takes a place, or if a cost gets dropped because a cheaper
+    genome beats it.
+    """
+    best: dict[float, Ranked] = {}
+    _keep_best_at_each_cost(
+        best,
+        [
+            ("a", Fitness(0.8, 2)),
+            ("b", Fitness(0.9, 2)),
+            ("copy of b", Fitness(0.9, 2)),
+            ("c", Fitness(0.85, 2)),
+            ("d", Fitness(0.7, 3)),
+        ],
+    )
+    assert best == {
+        2: [("b", Fitness(0.9, 2)), ("c", Fitness(0.85, 2))],
+        3: [("d", Fitness(0.7, 3))],
+    }
+
+
+def test_finalists_are_close_to_the_best() -> None:
+    """every finalist is within `finalist_window` of the most accurate genome
+    the run has seen.
+
+    fails if the window is ignored, which gives `choose` genomes that cannot
+    win and wastes its evaluations.
+    """
+    recorder = Recorder(toy_fitness)
+    finalists = run(recorder, finalist_window=0.02).finalists
+    most_accurate = max(fitness.accuracy for _, fitness in recorder.seen)
+    assert finalists
+    assert all(f.accuracy >= most_accurate - 0.02 for _, f in finalists)
+
+
+def test_evolve_returns_simplified_finalists() -> None:
+    """the finalists come back without the genes that do not help.
+
+    genes cost nothing, so only simplification shrinks a genome to one gene.
+    fails if the finalists skip simplification, which lets `choose` score
+    genomes that are different from the ones it returns.
+    """
+    finalists = run(accuracy_only, simplification_steps=200).finalists
+    assert all(len(genome) == 1 for genome, _ in finalists)
+
+
+def test_choose_takes_the_cheapest_close_to_the_best_mean() -> None:
+    """`choose` averages each finalist over all evaluators, then takes the
+    cheapest one within the tolerance of the best mean.
+
+    the cheap finalist is a little behind on the mean, but far behind with
+    the first evaluator. fails if `choose` trusts one evaluator, if it ignores
+    cost, or if it takes the cheapest finalist when it is too far behind.
+    """
+    finalists = [("cheap", Fitness(0.9, 2)), ("costly", Fitness(0.9, 3))]
+    evaluators = [
+        scores(cheap=0.88, costly=0.90),
+        scores(cheap=0.91, costly=0.90),
+    ]
+    assert choose(finalists, evaluators, mean_tolerance=0.006) == (
+        "cheap",
+        Fitness(0.895, 2),
+    )
+    assert choose(finalists, evaluators, mean_tolerance=0.004) == (
+        "costly",
+        Fitness(0.90, 3),
+    )
