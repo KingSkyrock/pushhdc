@@ -16,6 +16,11 @@ from pushhdc.pyshgp.push.program import Program, ProgramSignature
 from pushhdc.pyshgp.utils import Token
 from pushhdc.units import unit_instructions
 
+# samples of one length, which a program runs on together. the array says
+# where each of them goes in the output, and the hvs are their inputs, cut to
+# that length
+type SameLength = tuple[np.ndarray, list[HyperVector]]
+
 
 class Evaluator:
     """scores a genome as an encoder, by cross-validated accuracy and cost.
@@ -32,6 +37,13 @@ class Evaluator:
     position, can have 1 in place of the number of samples. it then uses less
     memory and makes programs faster, and the scores do not change.
 
+    `lengths` gives the number of units of each sample in `inputs`, the test
+    samples too. sample i then has only its first `lengths[i]` units in each
+    input, the shared inputs too. the units after that are left out, so they
+    can hold any values, and a sample gets the same hv that it gets alone.
+    the program runs one time for each different length, so many different
+    lengths make scoring slower.
+
     `samples` are the ones evolution may see, so everything but the test
     split. k-fold cross-validation scores each of the `folds` parts with
     prototypes built from the others, so every sample counts toward accuracy
@@ -47,13 +59,32 @@ class Evaluator:
         folds: int = 5,
         seed: int,
         unit_ops: bool = False,
+        lengths: Sequence[int] | np.ndarray | None = None,
     ) -> None:
         if any(batch.ndim != 3 for batch in inputs):
             raise ValueError(
                 "inputs must be shaped (samples, units, dimension)"
             )
-        self.inputs = [HyperVector(batch) for batch in inputs]
+        self.arity = len(inputs)
         self.labels = labels
+        count = max(len(batch) for batch in inputs)
+        units = inputs[0].shape[1]
+        lengths = (
+            np.full(count, units) if lengths is None else np.asarray(lengths)
+        )
+        if (
+            not np.issubdtype(lengths.dtype, np.integer)
+            or lengths.shape != (count,)
+            or lengths.min() < 0
+            or lengths.max() > units
+        ):
+            raise ValueError(
+                f"lengths must give each of the {count} samples in the inputs "
+                f"a whole number of units from 0 to {units}"
+            )
+        # the ints of the unit operations reach the last unit of the longest
+        # sample that evolution sees
+        self.units = int(lengths[samples].max())
         # shuffled in case samples are sorted by class, where one fold could
         # hold most of a class. done once so every genome gets the same folds
         shuffled = np.random.default_rng(seed).permutation(samples)
@@ -62,11 +93,14 @@ class Evaluator:
             for held_out in np.array_split(shuffled, folds)
         ]
         # a few samples for `fingerprint` and `kernel`, which makes them much
-        # cheaper than a full run
-        self.probes = [
-            HyperVector(batch if len(batch) == 1 else batch[shuffled[:64]])
-            for batch in inputs
-        ]
+        # cheaper than a full run. they include the longest sample, so they
+        # see every unit that evolution sees
+        probes = shuffled[:64]
+        longest = samples[np.argmax(lengths[samples])]
+        if lengths[longest] > lengths[probes].max():
+            probes = np.append(probes[:-1], longest)
+        self.by_length = _by_length(inputs, lengths, np.arange(count))
+        self.probes = _by_length(inputs, lengths, probes)
         # an encoder only needs the hv ops, since similarity is the
         # classifier's job
         self.instructions = hdc_instruction_set(register_core=False)
@@ -96,9 +130,9 @@ class Evaluator:
             # the unit operations use ints for the shift distance and for the
             # two ends of a range. `hv_permute` uses the same ints. the ints go
             # from 0 to the last unit, so a range can start at the first unit
-            units = self.inputs[0].data.shape[1]
+            units = self.units
             return GeneSpawner(
-                n_inputs=len(self.inputs),
+                n_inputs=self.arity,
                 instruction_set=self.instructions,
                 literals=[],
                 erc_generators=[lambda rng: int(rng.integers(0, units))],
@@ -106,7 +140,7 @@ class Evaluator:
         # hv_permute takes its shift from the int stack. permuting twice
         # shifts by two, so 1 can reach any shift
         return GeneSpawner(
-            n_inputs=len(self.inputs),
+            n_inputs=self.arity,
             instruction_set=self.instructions,
             literals=[1],
             erc_generators=[],
@@ -116,7 +150,7 @@ class Evaluator:
         """each sample's hv, shaped (samples, dimension), and the program's
         cost, for scoring other splits like test at the end. no hvs if the
         program leaves nothing on the hypervector stack."""
-        return self._run(genome, self.inputs)
+        return self._run(genome, self.by_length)
 
     def fingerprint(self, genome: Any) -> tuple[bytes, int]:
         """a fingerprint that programs share when they encode a few probe
@@ -139,23 +173,30 @@ class Evaluator:
     # `encode`, `fingerprint` and `kernel` run programs the same way, just on
     # different samples
     def _run(
-        self, genome: Any, inputs: list[HyperVector]
+        self, genome: Any, by_length: list[SameLength]
     ) -> tuple[np.ndarray | None, int]:
         signature = ProgramSignature(
-            arity=len(inputs), output_stacks=["hypervector"]
+            arity=self.arity, output_stacks=["hypervector"]
         )
         program = Program(code=genome_to_code(genome), signature=signature)
         interpreter = PushInterpreter(self.instructions)
-        [output] = interpreter.run(program, inputs)
-        if output is Token.no_stack_item:
-            return None, interpreter.cost
-        hvs = output.data.sum(axis=1)
-        # a program that only uses inputs shared by all samples gives one hv,
-        # which is then the hv of every sample
-        samples = max(len(batch.data) for batch in inputs)
-        if len(hvs) < samples:
-            hvs = np.repeat(hvs, samples, axis=0)
-        return hvs, interpreter.cost
+        sums = []
+        for where, inputs in by_length:
+            [output] = interpreter.run(program, inputs)
+            # every length runs the same ops, because no op uses the values or
+            # the number of units of an hv to choose what to do. so every
+            # length gives the same cost, and all lengths or none leave an hv
+            if output is Token.no_stack_item:
+                return None, interpreter.cost
+            hvs = output.data.sum(axis=1)
+            # a program that only uses inputs shared by all samples gives one
+            # hv, which is then the hv of every sample
+            if len(hvs) < len(where):
+                hvs = np.repeat(hvs, len(where), axis=0)
+            sums.append(hvs)
+        # puts each hv back at the place of its sample
+        order = np.concatenate([where for where, _ in by_length])
+        return np.concatenate(sums)[np.argsort(order)], interpreter.cost
 
     def __call__(self, genome: Any) -> Fitness:
         hvs, cost = self.encode(genome)
@@ -185,3 +226,22 @@ def centroid_accuracy(
     prototypes /= np.linalg.norm(prototypes, axis=1, keepdims=True)
     guesses = classes[(hvs[test] @ prototypes.T).argmax(axis=1)]
     return float((guesses == labels[test]).mean())
+
+
+# puts the samples in `rows` that have the same length together, and cuts
+# each of their inputs to that length. an input that all samples share keeps
+# its one row. the array of each length says where its samples are in `rows`
+def _by_length(
+    inputs: Sequence[np.ndarray], lengths: np.ndarray, rows: np.ndarray
+) -> list[SameLength]:
+    out = []
+    for length in np.unique(lengths[rows]):
+        where = np.flatnonzero(lengths[rows] == length)
+        cut = [
+            batch[:, :length]
+            if len(batch) == 1
+            else batch[rows[where], :length]
+            for batch in inputs
+        ]
+        out.append((where, [HyperVector(batch) for batch in cut]))
+    return out
