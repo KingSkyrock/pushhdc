@@ -27,6 +27,10 @@ class Evaluator:
     evolution then chooses how the units make groups. the units must be in
     order, for example sequence positions.
 
+    an input that is the same for every sample, for example the hv of each
+    position, can have 1 in place of the number of samples. it then uses less
+    memory and makes programs faster, and the scores do not change.
+
     `samples` are the ones evolution may see, so everything but the test
     split. k-fold cross-validation scores each of the `folds` parts with
     prototypes built from the others, so every sample counts toward accuracy
@@ -58,7 +62,10 @@ class Evaluator:
         ]
         # a few samples for `fingerprint`, which makes it much cheaper than a
         # full run
-        self.probes = [HyperVector(batch[shuffled[:64]]) for batch in inputs]
+        self.probes = [
+            HyperVector(batch if len(batch) == 1 else batch[shuffled[:64]])
+            for batch in inputs
+        ]
         # an encoder only needs the hv ops, since similarity is the
         # classifier's job. each op costs 1 until we measure real costs
         self.instructions = hdc_instruction_set(register_core=False)
@@ -128,7 +135,13 @@ class Evaluator:
         [output] = interpreter.run(program, inputs)
         if output is Token.no_stack_item:
             return None, interpreter.cost
-        return output.data.sum(axis=1), interpreter.cost
+        hvs = output.data.sum(axis=1)
+        # a program that only uses inputs shared by all samples gives one hv,
+        # which is then the hv of every sample
+        samples = max(len(batch.data) for batch in inputs)
+        if len(hvs) < samples:
+            hvs = np.repeat(hvs, samples, axis=0)
+        return hvs, interpreter.cost
 
     def __call__(self, genome: Any) -> Fitness:
         hvs, cost = self.encode(genome)

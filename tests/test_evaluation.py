@@ -162,3 +162,28 @@ def test_program_whose_hvs_are_all_zeros_scores_zero() -> None:
     # a shift of 4 moves all 4 units out, so only zeros stay
     fitness = evaluator(genome("input_0", 4, "hv_shift_units"))
     assert fitness == Fitness(accuracy=0.0, cost=1)
+
+
+def test_a_shared_input_scores_like_a_copied_one() -> None:
+    """an input with 1 sample gives the same hvs and fingerprints as the same
+    input copied to every sample, in a program that uses it with another
+    input and in a program that uses it alone.
+
+    fails if the probes take samples from the shared input, or if a program
+    that only uses the shared input gives 1 hv in place of 1 hv per sample.
+    """
+    rng = np.random.default_rng(0)
+    a = rng.choice([-1, 1], size=(3, 4, 8))
+    b = rng.choice([-1, 1], size=(1, 4, 8))
+    shared = encoder(a, b, unit_ops=True)
+    copied = encoder(a, np.repeat(b, 3, axis=0), unit_ops=True)
+    for program in (
+        genome("input_0", "input_1", "hv_bind"),
+        genome("input_1", 1, "hv_shift_units"),
+    ):
+        hvs, _ = shared.encode(program)
+        copied_hvs, _ = copied.encode(program)
+        assert hvs is not None
+        assert copied_hvs is not None
+        assert np.array_equal(hvs, copied_hvs)
+        assert shared.fingerprint(program) == copied.fingerprint(program)

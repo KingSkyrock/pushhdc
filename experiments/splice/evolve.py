@@ -32,16 +32,16 @@ def main() -> None:
     # each position is a unit. the unit operations let evolution choose how the
     # positions make groups, for example the n-gram length, the gaps, or the
     # part of the sequence to use. there are 2 inputs. one is the hv of the
-    # base at each position, and one is the hv of the position. each input has
-    # the shape (sequences, 60 positions, dimension). the folds change with the
+    # base at each position, shaped (sequences, positions, dimension). the
+    # other is the hv of the position, which is the same for every sequence,
+    # so it is shaped (1, positions, dimension). the folds change with the
     # codebook too, because a program can also get lucky with one set of folds
     def evaluator(codebook: int) -> Evaluator:
         rng = np.random.default_rng(codebook)
         hv = np.array([-1, 1], dtype=np.int8)
         values = rng.choice(hv, size=(len(BASES), DIMENSION))
         positions = rng.choice(hv, size=(sequences.shape[1], DIMENSION))
-        bases = values[sequences]
-        inputs = [bases, np.broadcast_to(positions, bases.shape)]
+        inputs = [values[sequences], positions[None]]
         return Evaluator(inputs, labels, train, seed=codebook, unit_ops=True)
 
     evolution = evaluator(SEED)
