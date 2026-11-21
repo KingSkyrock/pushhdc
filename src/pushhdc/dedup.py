@@ -5,14 +5,11 @@ would get the same accuracy. A fingerprint from running a program on a few
 samples spots those repeats at a small part of the cost of a full run.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from pushhdc.evolution import Fitness
+from pushhdc.fitness import Fitness
 
 type Fingerprint = Callable[[Any], tuple[bytes, float]]
 

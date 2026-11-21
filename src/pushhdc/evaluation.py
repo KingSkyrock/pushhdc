@@ -7,16 +7,20 @@ from typing import Any
 import numpy as np
 
 from pushhdc.clearing import Kernel
-from pushhdc.evolution import Fitness
+from pushhdc.fitness import Fitness
 from pushhdc.hypervector import HyperVector
 from pushhdc.push_hdc import hdc_instruction_set
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
+from pushhdc.pyshgp.push.instruction_set import InstructionSet
 from pushhdc.pyshgp.push.program import Program, ProgramSignature
 from pushhdc.recording import record, replay
 from pushhdc.units import unit_instructions
 
 # enough kernels for a few generations of a usual population
 _KEPT_KERNELS = 1024
+
+# how many samples `fingerprint` and `kernel` run on
+_PROBE_COUNT = 64
 
 # samples of one length, which a program runs on together. the array says
 # where each of them goes in the output, and the hvs are their inputs, cut to
@@ -151,7 +155,7 @@ class Evaluator:
         # a few samples for `fingerprint` and `kernel`, which makes them much
         # cheaper than a full run. they include the longest sample, so they
         # see every unit that evolution sees
-        probes = shuffled[:64]
+        probes = shuffled[:_PROBE_COUNT]
         longest = samples[np.argmax(lengths[samples])]
         if lengths[longest] > lengths[probes].max():
             probes = np.append(probes[:-1], longest)
@@ -166,35 +170,16 @@ class Evaluator:
         # kernel. both come from the same probe hvs, so `fingerprint` keeps
         # the kernels of the latest genomes for `kernel` to read
         self._kernels: dict[Any, Kernel | None] = {}
-        # an encoder only needs the hv ops, since similarity is the
-        # classifier's job
-        self.instructions = hdc_instruction_set(register_core=False)
-        self.instructions.unregister("hv_cosine_sim")
         self.unit_ops = unit_ops
-        if unit_ops:
-            self.instructions.register_list(unit_instructions())
-            # a program can use one result more than one time, and does not
-            # have to make it again
-            self.instructions.register_core_by_name("hypervector_dup$")
-        # every op that does arithmetic has the same cost
-        for instruction in self.instructions.values():
-            instruction.cost = 1
-        # ops that only move data or leave units out have no cost, because
-        # hardware does them with wiring and no arithmetic
-        self.instructions["hv_permute"].cost = 0
-        if unit_ops:
-            self.instructions["hv_shift_units"].cost = 0
-            self.instructions["hv_keep_units"].cost = 0
-            # a copy of an hv has no cost, because hardware can use the same hv
-            # again
-            self.instructions["hypervector_dup"].cost = 0
+        self.instructions = _encoder_instructions(unit_ops)
 
     def spawner(self) -> GeneSpawner:
         """makes random genes that match this evaluator's inputs and ops."""
         if self.unit_ops:
             # the unit operations use ints for the shift distance and for the
-            # two ends of a range. `hv_permute` uses the same ints. the ints go
-            # from 0 to the last unit, so a range can start at the first unit
+            # ends of a range, and `hv_permute` uses the same ints. the ints
+            # reach from the first unit to the last, so a range can start at
+            # the first unit
             units = self.units
             return GeneSpawner(
                 n_inputs=self.arity,
@@ -202,8 +187,9 @@ class Evaluator:
                 literals=[],
                 erc_generators=[lambda rng: int(rng.integers(0, units))],
             )
-        # hv_permute takes its shift from the int stack. permuting twice
-        # shifts by two, so 1 can reach any shift
+        # hv_permute takes its shift from the int stack. shifts add up when a
+        # program permutes again, so the smallest shift, the literal below,
+        # can reach any shift
         return GeneSpawner(
             n_inputs=self.arity,
             instruction_set=self.instructions,
@@ -313,6 +299,28 @@ def centroid_accuracy(
     prototypes /= np.where(norms == 0, 1, norms)
     guesses = classes[(hvs[test] @ prototypes.T).argmax(axis=1)]
     return float((guesses == labels[test]).mean())
+
+
+# ops that only move data, leave units out or copy an hv have no cost.
+# hardware does them with wiring and no arithmetic, and it can use the same hv
+# again in place of a copy
+_FREE_OPS = {"hv_permute", "hv_shift_units", "hv_keep_units", "hypervector_dup"}
+
+
+# the ops a program can use, with their costs. an encoder only needs the hv
+# ops, since similarity is the classifier's job. every op that does arithmetic
+# has the same cost
+def _encoder_instructions(unit_ops: bool) -> InstructionSet:
+    instructions = hdc_instruction_set(register_core=False)
+    instructions.unregister("hv_cosine_sim")
+    if unit_ops:
+        instructions.register_list(unit_instructions())
+        # a program can use one result more than one time, and does not have
+        # to make it again
+        instructions.register_core_by_name("hypervector_dup$")
+    for name, instruction in instructions.items():
+        instruction.cost = 0 if name in _FREE_OPS else 1
+    return instructions
 
 
 # puts the samples in `rows` that have the same length together, and cuts

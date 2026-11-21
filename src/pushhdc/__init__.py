@@ -13,7 +13,3 @@ __all__ = [
     "hdc_instruction_set",
     "hdc_type_library",
 ]
-
-
-def hello() -> str:
-    return "Hello from pushhdc!"

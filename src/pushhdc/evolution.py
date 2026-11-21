@@ -1,30 +1,18 @@
 """Evolutionary search over Push genomes."""
 
 import warnings
-from collections.abc import Callable, Generator, Iterable
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from multiprocessing import Pool
 from typing import Any
 
 import numpy as np
 
-from pushhdc.clearing import clear
+from pushhdc.clearing import Kernel, clear
 from pushhdc.dedup import deduplicated
+from pushhdc.fitness import Evaluate, Fitness, Ranked
+from pushhdc.parallel import scoring
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.gp.variation import Alternation, get_variation_operator
-
-
-@dataclass(frozen=True)
-class Fitness:
-    """how good a genome is. higher accuracy is better, then lower cost."""
-
-    accuracy: float
-    cost: float
-
-
-type Evaluate = Callable[[Any], Fitness]
-type Ranked = list[tuple[Any, Fitness]]
 
 
 @dataclass(frozen=True)
@@ -97,11 +85,6 @@ def evolve(
         spawner.spawn_genome(initial_genome_size, rng=rng)
         for _ in range(population_size)
     ]
-    # the tolerance counts from the best accuracy of the whole run. counting
-    # from the current population would let a chain of slightly worse but
-    # cheaper genomes walk accuracy down by more than the tolerance
-    best_accuracy = 0.0
-    best_at_each_cost: dict[float, Ranked] = {}
     kernel = getattr(evaluate, "kernel", None)
     if niche_similarity is not None and kernel is None:
         warnings.warn(
@@ -109,26 +92,16 @@ def evolve(
             "clearing. pass `niche_similarity=None` to turn clearing off.",
             stacklevel=2,
         )
+    ranker = _Ranker(accuracy_tolerance, kernel, niche_similarity)
 
-    def rank(scored: Ranked) -> Ranked:
-        nonlocal best_accuracy
-        accuracies = [fitness.accuracy for _, fitness in scored]
-        best_accuracy = max(best_accuracy, *accuracies)
-        _keep_best_at_each_cost(best_at_each_cost, scored)
-        ranked = _rank(scored, best_accuracy - accuracy_tolerance)
-        if niche_similarity is None or kernel is None:
-            return ranked
-        kernels = [kernel(genome) for genome, _ in ranked]
-        return clear(ranked, kernels, niche_similarity)
-
-    with _evaluator(evaluate, workers) as run_all:
+    with scoring(evaluate, workers) as run_all:
         fingerprint = getattr(evaluate, "fingerprint", None)
         evaluate_all = (
             run_all
             if fingerprint is None
             else deduplicated(run_all, fingerprint)
         )
-        ranked = rank(
+        ranked = ranker.rank(
             list(zip(population, evaluate_all(population), strict=True))
         )
         history = [ranked[0][1]]
@@ -137,7 +110,7 @@ def evolve(
                 make_child(ranked) for _ in range(population_size - elites)
             ]
             scored = list(zip(children, evaluate_all(children), strict=True))
-            ranked = rank(ranked[:elites] + scored)
+            ranked = ranker.rank(ranked[:elites] + scored)
             history.append(ranked[0][1])
 
         # a deletion that keeps the fingerprint gets the saved accuracy and
@@ -156,28 +129,12 @@ def evolve(
         # returned genome gets a full run for its true score
         if fingerprint is not None:
             [best_fitness] = run_all([best_genome])
-
-        # a finalist gets simplified before `choose` scores it, so the genome
-        # that `choose` picks is the one it scored
-        finalists: dict[float, Ranked] = {}
-        _keep_best_at_each_cost(
-            finalists,
-            [
-                simplify(genome, fitness)
-                for level in best_at_each_cost.values()
-                for genome, fitness in level
-                if fitness.accuracy >= best_accuracy - finalist_window
-            ],
+        finalists = _finalists(
+            ranker.best_at_each_cost,
+            ranker.best_accuracy - finalist_window,
+            simplify,
         )
-    return Result(
-        best_genome,
-        best_fitness,
-        history,
-        sorted(
-            (pair for level in finalists.values() for pair in level),
-            key=lambda pair: (pair[1].cost, -pair[1].accuracy),
-        ),
-    )
+    return Result(best_genome, best_fitness, history, finalists)
 
 
 def choose(
@@ -207,6 +164,63 @@ def choose(
     chosen = min(close, key=lambda i: (finalists[i][1].cost, -means[i]))
     genome, fitness = finalists[chosen]
     return genome, Fitness(float(means[chosen]), fitness.cost)
+
+
+# ranks each generation for `evolve`, and remembers the best accuracy and the
+# best genomes at each cost of the whole run. with a `kernel` and a
+# `similarity`, it clears genomes that do the same thing as a better one
+class _Ranker:
+    def __init__(
+        self,
+        tolerance: float,
+        kernel: Callable[[Any], Kernel | None] | None,
+        similarity: float | None,
+    ) -> None:
+        self.tolerance = tolerance
+        self.kernel = kernel
+        self.similarity = similarity
+        # the tolerance counts from the best accuracy of the whole run.
+        # counting from the current population would let a chain of slightly
+        # worse but cheaper genomes walk accuracy down by more than the
+        # tolerance
+        self.best_accuracy = 0.0
+        self.best_at_each_cost: dict[float, Ranked] = {}
+
+    def rank(self, scored: Ranked) -> Ranked:
+        accuracies = [fitness.accuracy for _, fitness in scored]
+        self.best_accuracy = max(self.best_accuracy, *accuracies)
+        _keep_best_at_each_cost(self.best_at_each_cost, scored)
+        ranked = _rank(scored, self.best_accuracy - self.tolerance)
+        if self.similarity is None or self.kernel is None:
+            return ranked
+        kernels = [self.kernel(genome) for genome, _ in ranked]
+        return clear(ranked, kernels, self.similarity)
+
+
+# the finalists for `choose`, cheapest first. each genome in
+# `best_at_each_cost` with an accuracy of at least `min_accuracy` gets
+# simplified, then the most accurate few at each new cost are kept. a
+# finalist gets simplified before `choose` scores it, so the genome that
+# `choose` picks is the one it scored
+def _finalists(
+    best_at_each_cost: dict[float, Ranked],
+    min_accuracy: float,
+    simplify: Callable[[Any, Fitness], tuple[Any, Fitness]],
+) -> Ranked:
+    finalists: dict[float, Ranked] = {}
+    _keep_best_at_each_cost(
+        finalists,
+        [
+            simplify(genome, fitness)
+            for level in best_at_each_cost.values()
+            for genome, fitness in level
+            if fitness.accuracy >= min_accuracy
+        ],
+    )
+    return sorted(
+        (pair for level in finalists.values() for pair in level),
+        key=lambda pair: (pair[1].cost, -pair[1].accuracy),
+    )
 
 
 # keeps the most accurate few genomes at each cost in `best`. the best one is
@@ -264,34 +278,3 @@ def _rank(scored: Ranked, good_enough: float) -> Ranked:
 def _tournament(ranked: Ranked, size: int, rng: np.random.Generator) -> Any:
     picks = rng.choice(len(ranked), size=min(size, len(ranked)), replace=False)
     return ranked[int(picks.min())][0]
-
-
-_worker: dict[str, Evaluate] = {}
-
-
-# keeps a dataset inside `evaluate` from being sent with every genome. it runs
-# once as each worker process starts and hands it `evaluate`
-def _init_worker(evaluate: Evaluate) -> None:
-    _worker["evaluate"] = evaluate
-
-
-def _evaluate_in_worker(genome: Any) -> Fitness:
-    return _worker["evaluate"](genome)
-
-
-# gives back a function that scores a list of genomes, in worker processes when
-# `workers > 1`. results come back in order, which keeps parallel runs
-# identical to serial ones
-@contextmanager
-def _evaluator(
-    evaluate: Evaluate, workers: int
-) -> Generator[Callable[[list[Any]], list[Fitness]]]:
-    if workers <= 1:
-        yield lambda genomes: [evaluate(genome) for genome in genomes]
-        return
-    pool = Pool(workers, initializer=_init_worker, initargs=(evaluate,))
-    try:
-        yield lambda genomes: list(pool.imap(_evaluate_in_worker, genomes))
-    finally:
-        pool.close()
-        pool.join()
