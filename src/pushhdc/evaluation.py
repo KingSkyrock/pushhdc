@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 
 from pushhdc.clearing import Kernel
-from pushhdc.evolution import Fitness
+from pushhdc.fitness import Fitness
 from pushhdc.hypervector import HyperVector
 from pushhdc.push_hdc import hdc_instruction_set
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code

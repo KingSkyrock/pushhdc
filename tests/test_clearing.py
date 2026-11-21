@@ -3,7 +3,7 @@
 import numpy as np
 
 from pushhdc.clearing import Kernel, clear
-from pushhdc.evolution import Fitness
+from pushhdc.fitness import Fitness
 
 # Helpers
 

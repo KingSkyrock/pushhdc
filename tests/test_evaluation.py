@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from pushhdc.evaluation import Evaluator, Lookup, centroid_accuracy
-from pushhdc.evolution import Fitness
+from pushhdc.fitness import Fitness
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.push.atoms import Input, InstructionMeta, Literal
 from pushhdc.pyshgp.push.types import PushInt

@@ -7,9 +7,6 @@ import numpy as np
 import pytest
 
 from pushhdc.evolution import (
-    Evaluate,
-    Fitness,
-    Ranked,
     Result,
     _evaluator,
     _keep_best_at_each_cost,
@@ -18,6 +15,7 @@ from pushhdc.evolution import (
     choose,
     evolve,
 )
+from pushhdc.fitness import Evaluate, Fitness, Ranked
 from pushhdc.pyshgp.gp.genome import GeneSpawner, Genome
 from pushhdc.pyshgp.push.atoms import InstructionMeta, Literal
 from pushhdc.pyshgp.push.instruction_set import InstructionSet
