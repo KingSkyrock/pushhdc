@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 
+from pushhdc.clearing import Kernel
 from pushhdc.evolution import Fitness
 from pushhdc.hypervector import HyperVector
 from pushhdc.push_hdc import hdc_instruction_set
@@ -26,6 +27,10 @@ class Evaluator:
     can also combine each unit with a later unit, and keep only some units.
     evolution then chooses how the units make groups. the units must be in
     order, for example sequence positions.
+
+    an input that is the same for every sample, for example the hv of each
+    position, can have 1 in place of the number of samples. it then uses less
+    memory and makes programs faster, and the scores do not change.
 
     `samples` are the ones evolution may see, so everything but the test
     split. k-fold cross-validation scores each of the `folds` parts with
@@ -56,11 +61,14 @@ class Evaluator:
             (np.setdiff1d(samples, held_out), held_out)
             for held_out in np.array_split(shuffled, folds)
         ]
-        # a few samples for `fingerprint`, which makes it much cheaper than a
-        # full run
-        self.probes = [HyperVector(batch[shuffled[:64]]) for batch in inputs]
+        # a few samples for `fingerprint` and `kernel`, which makes them much
+        # cheaper than a full run
+        self.probes = [
+            HyperVector(batch if len(batch) == 1 else batch[shuffled[:64]])
+            for batch in inputs
+        ]
         # an encoder only needs the hv ops, since similarity is the
-        # classifier's job. each op costs 1 until we measure real costs
+        # classifier's job
         self.instructions = hdc_instruction_set(register_core=False)
         self.instructions.unregister("hv_cosine_sim")
         self.unit_ops = unit_ops
@@ -69,9 +77,15 @@ class Evaluator:
             # a program can use one result more than one time, and does not
             # have to make it again
             self.instructions.register_core_by_name("hypervector_dup$")
+        # every op that does arithmetic has the same cost
         for instruction in self.instructions.values():
             instruction.cost = 1
+        # ops that only move data or leave units out have no cost, because
+        # hardware does them with wiring and no arithmetic
+        self.instructions["hv_permute"].cost = 0
         if unit_ops:
+            self.instructions["hv_shift_units"].cost = 0
+            self.instructions["hv_keep_units"].cost = 0
             # a copy of an hv has no cost, because hardware can use the same hv
             # again
             self.instructions["hypervector_dup"].cost = 0
@@ -115,8 +129,15 @@ class Evaluator:
             return b"", cost
         return hashlib.sha256(hvs.tobytes()).digest(), cost
 
-    # `encode` and `fingerprint` run programs the same way, just on different
-    # samples
+    def kernel(self, genome: Any) -> Kernel | None:
+        """how alike the program makes each pair of probe samples, for
+        `evolve` to tell programs apart by. none if the program tells no
+        probes apart."""
+        hvs, _ = self._run(genome, self.probes)
+        return None if hvs is None else Kernel.of(hvs)
+
+    # `encode`, `fingerprint` and `kernel` run programs the same way, just on
+    # different samples
     def _run(
         self, genome: Any, inputs: list[HyperVector]
     ) -> tuple[np.ndarray | None, int]:
@@ -128,7 +149,13 @@ class Evaluator:
         [output] = interpreter.run(program, inputs)
         if output is Token.no_stack_item:
             return None, interpreter.cost
-        return output.data.sum(axis=1), interpreter.cost
+        hvs = output.data.sum(axis=1)
+        # a program that only uses inputs shared by all samples gives one hv,
+        # which is then the hv of every sample
+        samples = max(len(batch.data) for batch in inputs)
+        if len(hvs) < samples:
+            hvs = np.repeat(hvs, samples, axis=0)
+        return hvs, interpreter.cost
 
     def __call__(self, genome: Any) -> Fitness:
         hvs, cost = self.encode(genome)
