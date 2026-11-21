@@ -115,7 +115,6 @@ class Evaluator:
                 "inputs must be shaped (samples, units, dimension)"
             )
         self.arity = len(inputs)
-        self.labels = labels
         count = max(len(batch) for batch in inputs)
         units = inputs[0].shape[1]
         lengths = (
@@ -137,10 +136,16 @@ class Evaluator:
         # shuffled in case samples are sorted by class, where one fold could
         # hold most of a class. done once so every genome gets the same folds
         shuffled = np.random.default_rng(seed).permutation(samples)
+        # scoring runs programs on `samples` only and gets their hvs in that
+        # order. so the folds and labels go by place in `samples`, not by
+        # sample number
+        place = np.empty(count, dtype=int)
+        place[samples] = np.arange(len(samples))
         self.splits = [
-            (np.setdiff1d(samples, held_out), held_out)
+            (place[np.setdiff1d(samples, held_out)], place[held_out])
             for held_out in np.array_split(shuffled, folds)
         ]
+        self.labels = labels[samples]
         # a few samples for `fingerprint` and `kernel`, which makes them much
         # cheaper than a full run. they include the longest sample, so they
         # see every unit that evolution sees
@@ -148,7 +153,12 @@ class Evaluator:
         longest = samples[np.argmax(lengths[samples])]
         if lengths[longest] > lengths[probes].max():
             probes = np.append(probes[:-1], longest)
-        self.by_length = _by_length(inputs, lengths, np.arange(count))
+        # the other samples, for example test, only get encoded at the end. so
+        # they are kept apart, and scoring does not run programs on them
+        self.samples = samples
+        self.others = np.setdiff1d(np.arange(count), samples)
+        self.seen = _by_length(inputs, lengths, samples)
+        self.unseen = _by_length(inputs, lengths, self.others)
         self.probes = _by_length(inputs, lengths, probes)
         # an encoder only needs the hv ops, since similarity is the
         # classifier's job
@@ -199,7 +209,15 @@ class Evaluator:
         """each sample's hv, shaped (samples, dimension), and the program's
         cost, for scoring other splits like test at the end. no hvs if the
         program leaves nothing on the hypervector stack."""
-        return self._run(genome, self.by_length)
+        seen, cost = self._run(genome, self.seen)
+        if seen is None:
+            return None, cost
+        count = len(self.samples) + len(self.others)
+        hvs = np.empty((count, *seen.shape[1:]), seen.dtype)
+        hvs[self.samples] = seen
+        if len(self.others):
+            hvs[self.others], _ = self._run(genome, self.unseen)
+        return hvs, cost
 
     def fingerprint(self, genome: Any) -> tuple[bytes, int]:
         """a fingerprint that programs share when they encode a few probe
@@ -219,8 +237,8 @@ class Evaluator:
         hvs, _ = self._run(genome, self.probes)
         return None if hvs is None else Kernel.of(hvs)
 
-    # `encode`, `fingerprint` and `kernel` run programs the same way, just on
-    # different samples
+    # scoring, `encode`, `fingerprint` and `kernel` run programs the same way,
+    # just on different samples
     def _run(
         self, genome: Any, by_length: list[SameLength]
     ) -> tuple[np.ndarray | None, int]:
@@ -248,7 +266,7 @@ class Evaluator:
         return np.concatenate(sums)[np.argsort(order)], interpreter.cost
 
     def __call__(self, genome: Any) -> Fitness:
-        hvs, cost = self.encode(genome)
+        hvs, cost = self._run(genome, self.seen)
         # hvs that are all zero contain no information
         if hvs is None or not hvs.any():
             return Fitness(accuracy=0.0, cost=cost)

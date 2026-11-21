@@ -106,6 +106,28 @@ def test_each_sample_is_scored_without_its_own_fold() -> None:
     assert evaluator(genome("input_0")).accuracy == pytest.approx(8 / 9)
 
 
+def test_samples_outside_evolution_get_encoded_but_not_scored() -> None:
+    """samples that are not in `samples` do not count toward accuracy, and
+    `encode` still gives them their own hvs.
+
+    fails if scoring reads labels or hvs by sample number where it has places
+    in `samples`, or if `encode` puts the other samples' hvs in the wrong
+    places.
+    """
+    classes = np.random.default_rng(0).choice([-1.0, 1.0], size=(3, 64))
+    # the same samples as the fold test above, after 3 samples of another
+    # class that evolution does not see
+    labels = np.array([0, 0, 0, 5, 5, 5, 5, 7, 7, 7, 7, 9])
+    hvs = classes[[2, 2, 2, 0, 0, 0, 0, 1, 1, 1, 1, 2]]
+    evaluator = Evaluator(
+        [hvs[:, None, :]], labels, np.arange(3, 12), folds=3, seed=0
+    )
+    assert evaluator(genome("input_0")).accuracy == pytest.approx(8 / 9)
+    encoded, _ = evaluator.encode(genome("input_0"))
+    assert encoded is not None
+    assert np.array_equal(encoded, hvs)
+
+
 def test_program_with_no_output_scores_zero() -> None:
     """a program that leaves no hv scores 0 and still pays for its ops.
 
