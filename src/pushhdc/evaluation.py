@@ -68,37 +68,23 @@ class Evaluator:
     ) -> None:
         self.arity = len(inputs)
         lengths = checked_lengths(inputs, lengths)
-        count = len(lengths)
         # the ints of the unit operations reach the last unit of the longest
         # sample that evolution sees
         self.units = int(lengths[samples].max())
         # shuffled in case samples are sorted by class, where one fold could
         # hold most of a class. done once so every genome gets the same folds
         shuffled = np.random.default_rng(seed).permutation(samples)
-        # scoring runs programs on `samples` only and gets their hvs in that
-        # order. so the folds and labels go by place in `samples`, not by
-        # sample number
-        place = np.empty(count, dtype=int)
-        place[samples] = np.arange(len(samples))
-        self.splits = [
-            (place[np.setdiff1d(samples, held_out)], place[held_out])
-            for held_out in np.array_split(shuffled, folds)
-        ]
-        self.labels = labels[samples]
-        # a few samples for `fingerprint` and `kernel`, which makes them much
-        # cheaper than a full run. they include the longest sample, so they
-        # see every unit that evolution sees
-        probes = shuffled[:_PROBE_COUNT]
-        longest = samples[np.argmax(lengths[samples])]
-        if lengths[longest] > lengths[probes].max():
-            probes = np.append(probes[:-1], longest)
+        self.splits = _folds(samples, shuffled, folds, len(lengths))
+        self.seen_labels = labels[samples]
         # the other samples, for example test, only get encoded at the end. so
         # they are kept apart, and scoring does not run programs on them
-        self.samples = samples
-        self.others = np.setdiff1d(np.arange(count), samples)
-        self.seen = by_length(inputs, lengths, samples)
-        self.unseen = by_length(inputs, lengths, self.others)
-        self.probes = by_length(inputs, lengths, probes)
+        self.seen_samples = samples
+        self.other_samples = np.setdiff1d(np.arange(len(lengths)), samples)
+        self.seen_by_length = by_length(inputs, lengths, samples)
+        self.other_by_length = by_length(inputs, lengths, self.other_samples)
+        self.probes_by_length = by_length(
+            inputs, lengths, _probe_samples(shuffled, samples, lengths)
+        )
         # `evolve` asks for the fingerprint of each new genome, then for its
         # kernel. both come from the same probe hvs, so `fingerprint` keeps
         # the kernels of the latest genomes for `kernel` to read
@@ -134,16 +120,16 @@ class Evaluator:
         """each sample's hv, shaped (samples, dimension), and the program's
         cost, for scoring other splits like test at the end. no hvs if the
         program leaves nothing on the hypervector stack."""
-        seen, cost = self._run(genome, self.seen)
+        seen, cost = self._run(genome, self.seen_by_length)
         if seen is None:
             return None, cost
-        count = len(self.samples) + len(self.others)
+        count = len(self.seen_samples) + len(self.other_samples)
         hvs = np.empty((count, *seen.shape[1:]), seen.dtype)
-        hvs[self.samples] = seen
+        hvs[self.seen_samples] = seen
         # a program that leaves an hv for some samples leaves one for all of
         # them, because no op chooses what to do by the values of an hv
-        if len(self.others):
-            hvs[self.others], _ = self._run(genome, self.unseen)
+        if len(self.other_samples):
+            hvs[self.other_samples], _ = self._run(genome, self.other_by_length)
         return hvs, cost
 
     def fingerprint(self, genome: Any) -> tuple[bytes, int]:
@@ -152,7 +138,7 @@ class Evaluator:
         fingerprint get the same accuracy, so `evolve` only scores one of
         them. programs that leave no hv all score 0, so they share an empty
         fingerprint. it also keeps the kernel of the probe hvs for `kernel`."""
-        hvs, cost = self._run(genome, self.probes)
+        hvs, cost = self._run(genome, self.probes_by_length)
         self._keep_kernel(genome, hvs)
         if hvs is None:
             return b"", cost
@@ -163,7 +149,7 @@ class Evaluator:
         `evolve` to tell programs apart by. none if the program tells no
         probes apart."""
         if genome not in self._kernels:
-            hvs, _ = self._run(genome, self.probes)
+            hvs, _ = self._run(genome, self.probes_by_length)
             self._keep_kernel(genome, hvs)
         return self._kernels[genome]
 
@@ -205,12 +191,12 @@ class Evaluator:
         return np.concatenate(sums)[np.argsort(order)], cost
 
     def __call__(self, genome: Any) -> Fitness:
-        hvs, cost = self._run(genome, self.seen)
+        hvs, cost = self._run(genome, self.seen_by_length)
         # hvs that are all zero contain no information
         if hvs is None or not hvs.any():
             return Fitness(accuracy=0.0, cost=cost)
         accuracies = [
-            centroid_accuracy(hvs, self.labels, train, held_out)
+            centroid_accuracy(hvs, self.seen_labels, train, held_out)
             for train, held_out in self.splits
         ]
         # weighting by fold size gives the share of all samples guessed right
@@ -234,6 +220,33 @@ def centroid_accuracy(
     prototypes /= np.where(norms == 0, 1, norms)
     guesses = classes[(hvs[test] @ prototypes.T).argmax(axis=1)]
     return float((guesses == labels[test]).mean())
+
+
+# k-fold splits of `samples` for cross-validation, each a pair of train and
+# held-out samples. scoring runs programs on `samples` only and gets their hvs
+# in that order, so the splits give places in `samples`, not sample numbers
+def _folds(
+    samples: np.ndarray, shuffled: np.ndarray, folds: int, count: int
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    place = np.empty(count, dtype=int)
+    place[samples] = np.arange(len(samples))
+    return [
+        (place[np.setdiff1d(samples, held_out)], place[held_out])
+        for held_out in np.array_split(shuffled, folds)
+    ]
+
+
+# a few samples for `fingerprint` and `kernel`, which makes them much cheaper
+# than a full run. they include the longest sample, so they see every unit
+# that evolution sees
+def _probe_samples(
+    shuffled: np.ndarray, samples: np.ndarray, lengths: np.ndarray
+) -> np.ndarray:
+    probes = shuffled[:_PROBE_COUNT]
+    longest = samples[np.argmax(lengths[samples])]
+    if lengths[longest] > lengths[probes].max():
+        probes = np.append(probes[:-1], longest)
+    return probes
 
 
 # ops that only move data, leave units out or copy an hv have no cost.
