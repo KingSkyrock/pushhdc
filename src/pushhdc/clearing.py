@@ -12,12 +12,9 @@ unrelated, for example when one program has an extra permute.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 
-if TYPE_CHECKING:
-    from pushhdc.evolution import Ranked
+from pushhdc.fitness import Ranked
 
 
 class Kernel:

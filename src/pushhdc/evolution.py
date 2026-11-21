@@ -11,20 +11,9 @@ import numpy as np
 
 from pushhdc.clearing import clear
 from pushhdc.dedup import deduplicated
+from pushhdc.fitness import Evaluate, Fitness, Ranked
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.gp.variation import Alternation, get_variation_operator
-
-
-@dataclass(frozen=True)
-class Fitness:
-    """how good a genome is. higher accuracy is better, then lower cost."""
-
-    accuracy: float
-    cost: float
-
-
-type Evaluate = Callable[[Any], Fitness]
-type Ranked = list[tuple[Any, Fitness]]
 
 
 @dataclass(frozen=True)

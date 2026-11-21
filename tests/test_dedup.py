@@ -1,7 +1,7 @@
 """Tests for scoring each distinct encoding once, using toy genomes."""
 
 from pushhdc.dedup import deduplicated
-from pushhdc.evolution import Fitness
+from pushhdc.fitness import Fitness
 
 # Helpers
 
