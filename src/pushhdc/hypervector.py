@@ -29,7 +29,15 @@ logger = logging.getLogger(__name__)
 # which fits any sum or product of two int8 values, then clip to -127..127 so
 # negating stays in range
 def _saturate(data: np.ndarray) -> np.ndarray:
-    return data.clip(-127, 127)
+    return data.clip(-127, 127, out=data).astype(np.int8)
+
+
+# the largest size of a value, as a python int. int8 math would wrap around,
+# for example the size of -128 comes out as -128
+def _largest(data: np.ndarray) -> int:
+    if data.size == 0:
+        return 0
+    return max(int(data.max()), -int(data.min()))
 
 
 class HyperVector:
@@ -58,7 +66,9 @@ class HyperVector:
         """
         if data is not None:
             # Cast input data to int8 for memory efficiency (1 byte per dimension)
-            self.data: np.ndarray = data.astype(np.int8)
+            # an int8 array is used as it is, so an op does not copy its
+            # result again. a change to that array then changes the hv too
+            self.data: np.ndarray = data.astype(np.int8, copy=False)
             self.dimension: int = self.data.shape[-1]
         else:
             if rng is None:
@@ -92,7 +102,12 @@ class HyperVector:
                 "Hypervectors must have the same dimension to bind."
             )
 
-        bound_data = _saturate(self.data.astype(np.int16) * other.data)
+        # when no product can pass 127, int8 math gives the same values and
+        # is much faster. most hvs are -1s and 1s, so this is the usual case
+        if _largest(self.data) * _largest(other.data) <= 127:
+            bound_data = self.data * other.data
+        else:
+            bound_data = _saturate(self.data.astype(np.int16) * other.data)
         return HyperVector(data=bound_data, dimension=self.dimension)
 
     def bundle(self, other: "HyperVector") -> "HyperVector":
@@ -113,7 +128,12 @@ class HyperVector:
             )
 
         # Element-wise integer addition (accumulating votes)
-        summed_data = _saturate(self.data.astype(np.int16) + other.data)
+        # when no sum can pass 127, int8 math gives the same values and is
+        # much faster
+        if _largest(self.data) + _largest(other.data) <= 127:
+            summed_data = self.data + other.data
+        else:
+            summed_data = _saturate(self.data.astype(np.int16) + other.data)
         return HyperVector(data=summed_data, dimension=self.dimension)
 
     def permute(self, shift: int = 1) -> "HyperVector":
