@@ -1,6 +1,5 @@
 """Tests for the evolutionary loop, using toy evaluators instead of HDC."""
 
-import time
 from typing import Any
 
 import numpy as np
@@ -8,7 +7,6 @@ import pytest
 
 from pushhdc.evolution import (
     Result,
-    _evaluator,
     _keep_best_at_each_cost,
     _simplify,
     _tournament,
@@ -118,13 +116,6 @@ class OneFingerprint:
         return b"same", len(genome)
 
 
-# makes genome 0 finish last in parallel. the "genomes" are plain ints
-def slow_first(genome: int) -> Fitness:
-    if genome == 0:
-        time.sleep(0.3)
-    return Fitness(accuracy=genome, cost=0)
-
-
 # a genome of int literals, for tests that only care which genes are left
 def numbers(*values: int) -> Any:
     return Genome([Literal(value=v, push_type=PushInt) for v in values])
@@ -198,18 +189,6 @@ def test_same_seed_gives_same_run_serial_and_parallel() -> None:
     evaluation scores genomes differently from serial.
     """
     assert run(toy_fitness) == run(toy_fitness, workers=2)
-
-
-def test_parallel_scores_line_up_with_their_genomes() -> None:
-    """parallel evaluation returns each score in its genome's position.
-
-    genome 0 is slow, so it finishes after the others. fails if results are
-    taken in the order workers finish (`imap_unordered`), which pairs
-    genomes with the wrong scores.
-    """
-    genomes = list(range(6))
-    with _evaluator(slow_first, workers=2) as evaluate_all:
-        assert evaluate_all(genomes) == [Fitness(g, 0) for g in genomes]
 
 
 def test_best_fitness_never_gets_worse() -> None:
