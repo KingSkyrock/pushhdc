@@ -8,7 +8,7 @@ import numpy as np
 
 from pushhdc.clearing import Kernel
 from pushhdc.fitness import Fitness
-from pushhdc.hypervector import HyperVector
+from pushhdc.inputs import Lookup, SameLength, by_length, checked_lengths
 from pushhdc.push_hdc import hdc_instruction_set
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
 from pushhdc.pyshgp.push.instruction_set import InstructionSet
@@ -21,58 +21,6 @@ _KEPT_KERNELS = 1024
 
 # how many samples `fingerprint` and `kernel` run on
 _PROBE_COUNT = 64
-
-# samples of one length, which a program runs on together. the array says
-# where each of them goes in the output, and the hvs are their inputs, cut to
-# that length
-type SameLength = tuple[np.ndarray, list[HyperVector]]
-
-
-class Lookup:
-    """an input given as one hv for each symbol and the symbol at each unit,
-    so nobody has to build the padded (samples, units, dimension) array.
-
-    unit u of sample i is `hvs[symbols[i, u]]`. `hvs` has one row for each
-    symbol, and `symbols` is shaped (samples, units), or (1, units) for an
-    input that every sample shares. the evaluator makes each unit's hv when it
-    cuts its inputs, and with `lengths` it makes only the units within each
-    length. the padded array holds a copy of a symbol's hv at each unit up to
-    the longest sample, so it can be much bigger than the hvs and symbols.
-    the symbols past each length are never read, but each must still pick
-    an hv, for example 0.
-    """
-
-    # `Evaluator` reads an input as it reads an array, by `ndim`, `shape`,
-    # `len` and cuts
-    ndim = 3
-
-    def __init__(self, hvs: np.ndarray, symbols: np.ndarray) -> None:
-        hvs, symbols = np.asarray(hvs), np.asarray(symbols)
-        if hvs.ndim != 2 or symbols.ndim != 2:
-            raise ValueError(
-                "hvs must have one row for each symbol, and symbols must be "
-                "shaped (samples, units)"
-            )
-        # numpy would take -1 as the last hv with no error
-        if not np.issubdtype(symbols.dtype, np.integer) or (
-            symbols.size > 0
-            and (symbols.min() < 0 or symbols.max() >= len(hvs))
-        ):
-            raise ValueError(
-                f"symbols must pick one of the {len(hvs)} hvs, so they must be "
-                f"whole numbers from 0 to {len(hvs) - 1}"
-            )
-        self.hvs = hvs
-        self.symbols = symbols
-        self.shape = (*symbols.shape, hvs.shape[1])
-
-    def __len__(self) -> int:
-        return len(self.symbols)
-
-    # the evaluator reads an input in cuts of samples and units, so only the
-    # hvs of those units get made
-    def __getitem__(self, key: Any) -> np.ndarray:
-        return np.asarray(self.hvs[self.symbols[key]])
 
 
 class Evaluator:
@@ -118,26 +66,9 @@ class Evaluator:
         unit_ops: bool = False,
         lengths: Sequence[int] | np.ndarray | None = None,
     ) -> None:
-        if any(batch.ndim != 3 for batch in inputs):
-            raise ValueError(
-                "inputs must be shaped (samples, units, dimension)"
-            )
         self.arity = len(inputs)
-        count = max(len(batch) for batch in inputs)
-        units = inputs[0].shape[1]
-        lengths = (
-            np.full(count, units) if lengths is None else np.asarray(lengths)
-        )
-        if (
-            not np.issubdtype(lengths.dtype, np.integer)
-            or lengths.shape != (count,)
-            or lengths.min() < 0
-            or lengths.max() > units
-        ):
-            raise ValueError(
-                f"lengths must give each of the {count} samples in the inputs "
-                f"a whole number of units from 0 to {units}"
-            )
+        lengths = checked_lengths(inputs, lengths)
+        count = len(lengths)
         # the ints of the unit operations reach the last unit of the longest
         # sample that evolution sees
         self.units = int(lengths[samples].max())
@@ -165,9 +96,9 @@ class Evaluator:
         # they are kept apart, and scoring does not run programs on them
         self.samples = samples
         self.others = np.setdiff1d(np.arange(count), samples)
-        self.seen = _by_length(inputs, lengths, samples)
-        self.unseen = _by_length(inputs, lengths, self.others)
-        self.probes = _by_length(inputs, lengths, probes)
+        self.seen = by_length(inputs, lengths, samples)
+        self.unseen = by_length(inputs, lengths, self.others)
+        self.probes = by_length(inputs, lengths, probes)
         # `evolve` asks for the fingerprint of each new genome, then for its
         # kernel. both come from the same probe hvs, so `fingerprint` keeps
         # the kernels of the latest genomes for `kernel` to read
@@ -250,7 +181,7 @@ class Evaluator:
     # scoring, `encode`, `fingerprint` and `kernel` run programs the same way,
     # just on different samples
     def _run(
-        self, genome: Any, by_length: list[SameLength]
+        self, genome: Any, parts: list[SameLength]
     ) -> tuple[np.ndarray | None, int]:
         signature = ProgramSignature(
             arity=self.arity, output_stacks=["hypervector"]
@@ -262,7 +193,7 @@ class Evaluator:
         if output is None:
             return None, cost
         sums = []
-        for where, inputs in by_length:
+        for where, inputs in parts:
             hvs = replay(output, inputs).data.sum(axis=1)
             # a program that only uses inputs shared by all samples gives one
             # hv, which is then the hv of every sample
@@ -270,7 +201,7 @@ class Evaluator:
                 hvs = np.repeat(hvs, len(where), axis=0)
             sums.append(hvs)
         # puts each hv back at the place of its sample
-        order = np.concatenate([where for where, _ in by_length])
+        order = np.concatenate([where for where, _ in parts])
         return np.concatenate(sums)[np.argsort(order)], cost
 
     def __call__(self, genome: Any) -> Fitness:
@@ -325,22 +256,3 @@ def _encoder_instructions(unit_ops: bool) -> InstructionSet:
     for name, instruction in instructions.items():
         instruction.cost = 0 if name in _FREE_OPS else 1
     return instructions
-
-
-# puts the samples in `rows` that have the same length together, and cuts
-# each of their inputs to that length. an input that all samples share keeps
-# its one row. the array of each length says where its samples are in `rows`
-def _by_length(
-    inputs: Sequence[np.ndarray | Lookup], lengths: np.ndarray, rows: np.ndarray
-) -> list[SameLength]:
-    out = []
-    for length in np.unique(lengths[rows]):
-        where = np.flatnonzero(lengths[rows] == length)
-        cut = [
-            batch[:, :length]
-            if len(batch) == 1
-            else batch[rows[where], :length]
-            for batch in inputs
-        ]
-        out.append((where, [HyperVector(batch) for batch in cut]))
-    return out

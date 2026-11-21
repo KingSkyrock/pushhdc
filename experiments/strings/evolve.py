@@ -11,8 +11,9 @@ import sys
 import numpy as np
 from datasets import LETTERS, load, padded, split
 
-from pushhdc.evaluation import Evaluator, Lookup, centroid_accuracy
+from pushhdc.evaluation import Evaluator, centroid_accuracy
 from pushhdc.evolution import choose, evolve
+from pushhdc.inputs import Lookup
 from pushhdc.pyshgp.gp.genome import genome_to_code
 
 DIMENSION = 256

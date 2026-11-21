@@ -5,8 +5,9 @@ from typing import Any
 import numpy as np
 import pytest
 
-from pushhdc.evaluation import Evaluator, Lookup, centroid_accuracy
+from pushhdc.evaluation import Evaluator, centroid_accuracy
 from pushhdc.fitness import Fitness
+from pushhdc.inputs import Lookup
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.push.atoms import Input, InstructionMeta, Literal
 from pushhdc.pyshgp.push.types import PushInt
