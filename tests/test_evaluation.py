@@ -169,6 +169,29 @@ def test_fingerprint_matches_programs_that_encode_alike() -> None:
     assert (plain_cost, detour_cost) == (0, 1)
 
 
+def test_each_genome_gets_its_own_kernel_after_fingerprints() -> None:
+    """after `fingerprint` runs on some genomes, `kernel` gives each of them
+    the same kernel as an evaluator that made no fingerprints.
+
+    fails if the kernels that `fingerprint` keeps for `kernel` get mixed up
+    between genomes.
+    """
+    a, b = np.random.default_rng(0).choice([-1.0, 1.0], size=(2, 8, 3, 16))
+    programs = [
+        genome("input_0"),
+        genome("input_1"),
+        genome("input_0", "input_1", "hv_bind"),
+    ]
+    evaluator = encoder(a, b)
+    for program in programs:
+        evaluator.fingerprint(program)
+    for program in programs:
+        kept, fresh = evaluator.kernel(program), encoder(a, b).kernel(program)
+        assert kept is not None
+        assert fresh is not None
+        assert kept.alignment(fresh) == pytest.approx(1)
+
+
 def test_shift_units_looks_ahead_and_fills_the_end_with_zeros() -> None:
     """after a shift of 1, each unit contains the hv of the next unit, and the
     last unit contains zeros.
