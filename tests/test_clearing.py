@@ -3,6 +3,7 @@
 import numpy as np
 
 from pushhdc.clearing import Kernel, clear
+from pushhdc.evaluation import _PROBE_COUNT
 from pushhdc.fitness import Fitness
 
 # Helpers
@@ -10,7 +11,7 @@ from pushhdc.fitness import Fitness
 
 # random hvs for as many samples as `Evaluator` uses as probes
 def random_hvs(seed: int) -> np.ndarray:
-    return np.random.default_rng(seed).choice([-1, 1], size=(64, 256))
+    return np.random.default_rng(seed).choice([-1, 1], size=(_PROBE_COUNT, 256))
 
 
 # the same hvs after a fixed bind and permute, plus a bias for every sample.
