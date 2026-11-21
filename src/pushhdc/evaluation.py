@@ -179,8 +179,9 @@ class Evaluator:
         """makes random genes that match this evaluator's inputs and ops."""
         if self.unit_ops:
             # the unit operations use ints for the shift distance and for the
-            # two ends of a range. `hv_permute` uses the same ints. the ints go
-            # from 0 to the last unit, so a range can start at the first unit
+            # ends of a range, and `hv_permute` uses the same ints. the ints
+            # reach from the first unit to the last, so a range can start at
+            # the first unit
             units = self.units
             return GeneSpawner(
                 n_inputs=self.arity,
@@ -188,8 +189,9 @@ class Evaluator:
                 literals=[],
                 erc_generators=[lambda rng: int(rng.integers(0, units))],
             )
-        # hv_permute takes its shift from the int stack. permuting twice
-        # shifts by two, so 1 can reach any shift
+        # hv_permute takes its shift from the int stack. shifts add up when a
+        # program permutes again, so the smallest shift, the literal below,
+        # can reach any shift
         return GeneSpawner(
             n_inputs=self.arity,
             instruction_set=self.instructions,
