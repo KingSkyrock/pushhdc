@@ -11,9 +11,8 @@ from pushhdc.evolution import Fitness
 from pushhdc.hypervector import HyperVector
 from pushhdc.push_hdc import hdc_instruction_set
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
-from pushhdc.pyshgp.push.interpreter import PushInterpreter
 from pushhdc.pyshgp.push.program import Program, ProgramSignature
-from pushhdc.pyshgp.utils import Token
+from pushhdc.recording import record, replay
 from pushhdc.units import unit_instructions
 
 # samples of one length, which a program runs on together. the array says
@@ -246,16 +245,14 @@ class Evaluator:
             arity=self.arity, output_stacks=["hypervector"]
         )
         program = Program(code=genome_to_code(genome), signature=signature)
-        interpreter = PushInterpreter(self.instructions)
+        # every length does the same ops, so the interpreter runs one time and
+        # numpy does the ops again on each length (see `pushhdc.recording`)
+        output, cost = record(program, self.instructions)
+        if output is None:
+            return None, cost
         sums = []
         for where, inputs in by_length:
-            [output] = interpreter.run(program, inputs)
-            # every length runs the same ops, because no op uses the values or
-            # the number of units of an hv to choose what to do. so every
-            # length gives the same cost, and all lengths or none leave an hv
-            if output is Token.no_stack_item:
-                return None, interpreter.cost
-            hvs = output.data.sum(axis=1)
+            hvs = replay(output, inputs).data.sum(axis=1)
             # a program that only uses inputs shared by all samples gives one
             # hv, which is then the hv of every sample
             if len(hvs) < len(where):
@@ -263,7 +260,7 @@ class Evaluator:
             sums.append(hvs)
         # puts each hv back at the place of its sample
         order = np.concatenate([where for where, _ in by_length])
-        return np.concatenate(sums)[np.argsort(order)], interpreter.cost
+        return np.concatenate(sums)[np.argsort(order)], cost
 
     def __call__(self, genome: Any) -> Fitness:
         hvs, cost = self._run(genome, self.seen)
