@@ -1,4 +1,5 @@
-"""Loads NysHD's datasets of strings with different lengths, and splits them.
+"""Loads NysHD's datasets of strings with different lengths, and makes the
+letter hvs.
 
 `protein` is the RhodoPred dataset of rhodopsin proteins, as strings of amino
 acids, and each label is a protein family. `sms` is the UCI SMS Spam
@@ -8,7 +9,6 @@ strings.
 """
 
 import io
-import math
 import re
 import urllib.request
 import zipfile
@@ -64,14 +64,13 @@ def load(name: str) -> tuple[list[str], np.ndarray]:
     return strings, labels
 
 
-def split(count: int) -> tuple[np.ndarray, np.ndarray]:
-    """train and test indices. this is the split in NysHD's code (Zhao et
-    al., AAAI 2025), so the test strings are the same as theirs."""
-    # matches scikit-learn's `train_test_split(test_size=0.2, random_state=42)`
-    # so `evolve.py` does not need scikit-learn
-    shuffled = np.random.RandomState(42).permutation(count)
-    test_count = math.ceil(0.2 * count)
-    return np.sort(shuffled[test_count:]), np.sort(shuffled[:test_count])
+def letter_hvs(dimension: int, rng: np.random.Generator) -> np.ndarray:
+    """one random hv of -1s and 1s for each letter in `LETTERS`, then all
+    zeros for no letter, so padding adds nothing."""
+    hvs = rng.choice(
+        np.array([-1, 1], dtype=np.int8), (len(LETTERS), dimension)
+    )
+    return np.concatenate([hvs, np.zeros((1, dimension), dtype=np.int8)])
 
 
 def padded(strings: list[str]) -> np.ndarray:

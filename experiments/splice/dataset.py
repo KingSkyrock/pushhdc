@@ -1,7 +1,6 @@
-"""Loads the UCI splice-junction DNA sequences and splits them."""
+"""Loads the UCI splice-junction DNA sequences."""
 
 import io
-import math
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -31,16 +30,6 @@ def load() -> tuple[np.ndarray, np.ndarray]:
     )
     labels = np.array([CLASSES.index(row[0]) for row in rows])
     return sequences, labels
-
-
-def split(count: int) -> tuple[np.ndarray, np.ndarray]:
-    """train and test indices, 80/20. this is the split in NysHD's code (Zhao
-    et al., AAAI 2025), so the test sequences are the same as theirs."""
-    # matches scikit-learn's `train_test_split(test_size=0.2, random_state=42)`
-    # so `evolve.py` does not need scikit-learn
-    shuffled = np.random.RandomState(42).permutation(count)
-    test_count = math.ceil(0.2 * count)
-    return np.sort(shuffled[test_count:]), np.sort(shuffled[:test_count])
 
 
 def _download() -> None:

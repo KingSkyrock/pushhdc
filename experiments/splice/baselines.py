@@ -12,15 +12,17 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
-from dataset import BASES, CLASSES, WINDOWS, load, split
+from dataset import BASES, CLASSES, WINDOWS, load
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
 from pushhdc.evaluation import centroid_accuracy
 
-# the string experiments share `nyshd.py`, which is in `experiments/`
+# the string experiments share `nyshd.py` and `protocol.py`, which are in
+# `experiments/`
 sys.path.append(str(Path(__file__).parents[1]))
 import nyshd
+from protocol import nyshd_split
 
 DIMENSIONS = (64, 256, 1024, 4096, 10000)
 SEEDS = range(5)
@@ -121,7 +123,7 @@ def in_parts(
 def main() -> None:
     sequences, labels = load()
     # nothing here gets tuned, so a validation split is not needed
-    train, test = split(len(labels))
+    train, test = nyshd_split(len(labels))
 
     def row(name: str, accuracies: list[float]) -> None:
         print(f"{name:32}" + "".join(f"{a:8.3f}" for a in accuracies))
