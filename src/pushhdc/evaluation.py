@@ -15,6 +15,9 @@ from pushhdc.pyshgp.push.program import Program, ProgramSignature
 from pushhdc.recording import record, replay
 from pushhdc.units import unit_instructions
 
+# enough kernels for a few generations of a usual population
+_KEPT_KERNELS = 1024
+
 # samples of one length, which a program runs on together. the array says
 # where each of them goes in the output, and the hvs are their inputs, cut to
 # that length
@@ -161,6 +164,10 @@ class Evaluator:
         self.seen = _by_length(inputs, lengths, samples)
         self.unseen = _by_length(inputs, lengths, self.others)
         self.probes = _by_length(inputs, lengths, probes)
+        # `evolve` asks for the fingerprint of each new genome, then for its
+        # kernel. both come from the same probe hvs, so `fingerprint` keeps
+        # the kernels of the latest genomes for `kernel` to read
+        self._kernels: dict[Any, Kernel | None] = {}
         # an encoder only needs the hv ops, since similarity is the
         # classifier's job
         self.instructions = hdc_instruction_set(register_core=False)
@@ -227,8 +234,9 @@ class Evaluator:
         samples the same way, and the program's cost. programs with the same
         fingerprint get the same accuracy, so `evolve` only scores one of
         them. programs that leave no hv all score 0, so they share an empty
-        fingerprint."""
+        fingerprint. it also keeps the kernel of the probe hvs for `kernel`."""
         hvs, cost = self._run(genome, self.probes)
+        self._keep_kernel(genome, hvs)
         if hvs is None:
             return b"", cost
         return hashlib.sha256(hvs.tobytes()).digest(), cost
@@ -237,8 +245,21 @@ class Evaluator:
         """how alike the program makes each pair of probe samples, for
         `evolve` to tell programs apart by. none if the program tells no
         probes apart."""
-        hvs, _ = self._run(genome, self.probes)
-        return None if hvs is None else Kernel.of(hvs)
+        if genome not in self._kernels:
+            hvs, _ = self._run(genome, self.probes)
+            self._keep_kernel(genome, hvs)
+        return self._kernels[genome]
+
+    # keeps only the latest kernels, so that the memory they use stays small
+    def _keep_kernel(self, genome: Any, hvs: np.ndarray | None) -> None:
+        if genome not in self._kernels and len(self._kernels) >= _KEPT_KERNELS:
+            del self._kernels[next(iter(self._kernels))]
+        self._kernels[genome] = None if hvs is None else Kernel.of(hvs)
+
+    # the kept kernels only help the process that made them. so a copy of the
+    # evaluator for a worker process leaves them out
+    def __getstate__(self) -> dict[str, Any]:
+        return {**self.__dict__, "_kernels": {}}
 
     # scoring, `encode`, `fingerprint` and `kernel` run programs the same way,
     # just on different samples
