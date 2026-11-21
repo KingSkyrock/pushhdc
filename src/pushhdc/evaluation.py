@@ -19,6 +19,9 @@ from pushhdc.units import unit_instructions
 # enough kernels for a few generations of a usual population
 _KEPT_KERNELS = 1024
 
+# how many samples `fingerprint` and `kernel` run on
+_PROBE_COUNT = 64
+
 # samples of one length, which a program runs on together. the array says
 # where each of them goes in the output, and the hvs are their inputs, cut to
 # that length
@@ -152,7 +155,7 @@ class Evaluator:
         # a few samples for `fingerprint` and `kernel`, which makes them much
         # cheaper than a full run. they include the longest sample, so they
         # see every unit that evolution sees
-        probes = shuffled[:64]
+        probes = shuffled[:_PROBE_COUNT]
         longest = samples[np.argmax(lengths[samples])]
         if lengths[longest] > lengths[probes].max():
             probes = np.append(probes[:-1], longest)
