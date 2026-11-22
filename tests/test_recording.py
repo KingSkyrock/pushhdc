@@ -42,7 +42,10 @@ def test_replay_gives_the_same_hv_and_cost_as_a_full_run() -> None:
     instructions = encoder_instructions(unit_ops=True)
     hvs = [HyperVector(batch) for batch in inputs]
     spawner = encoder_spawner(
-        instructions, len(inputs), unit_ops=True, units=inputs[0].shape[1]
+        instructions,
+        len(inputs),
+        unit_ops=True,
+        seen_lengths=np.full(len(inputs[0]), inputs[0].shape[1]),
     )
     for _ in range(200):
         genome = program(spawner.spawn_genome((10, 50), rng=rng), arity=2)

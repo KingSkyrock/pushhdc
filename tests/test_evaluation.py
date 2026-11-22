@@ -381,3 +381,37 @@ def test_probes_see_the_longest_sample() -> None:
         lengths[place] = 8
         evaluator = encoder(a, unit_ops=True, lengths=lengths)
         assert evaluator.fingerprint(short)[0] != evaluator.fingerprint(long)[0]
+
+
+def test_ints_fit_short_samples_and_still_reach_the_longest() -> None:
+    """when most samples are much shorter than the longest, many new ints
+    fall inside a short sample, and many still reach the far end of the
+    longest sample.
+
+    fails if every int is drawn from 0 to the last unit, because then few
+    ints fit a short sample. fails if every int is a place in a sample,
+    because then few ints reach the far end. also fails if a place can be
+    one unit past the end of its sample, if the draw reads the lengths of
+    test samples, or if empty samples are not left out, because an empty
+    sample has no place to draw.
+    """
+    # evolution sees empty samples, samples of one unit and one long sample.
+    # the only place in a sample of one unit is 0. the test samples are all
+    # long, so a place in them is rarely 0
+    lengths = np.array([0] * 10 + [1] * 9 + [100] * 81)
+    evaluator = Evaluator(
+        [np.ones((len(lengths), 100, 1))],
+        np.zeros(len(lengths)),
+        np.arange(20),
+        seed=0,
+        unit_ops=True,
+        lengths=lengths,
+    )
+    draw = evaluator.spawner().erc_generators[0]
+    rng = np.random.default_rng(0)
+    ints = np.array([draw(rng) for _ in range(2000)])
+    # about half of the ints are 0, and about a quarter are in the far half
+    # of the long sample. each bug above makes one of these two shares much
+    # smaller
+    assert np.mean(ints == 0) > 0.3
+    assert np.mean(ints >= 50) > 0.15

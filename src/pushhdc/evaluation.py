@@ -74,9 +74,9 @@ class Evaluator:
     ) -> None:
         self.arity = len(inputs)
         lengths = checked_lengths(inputs, lengths)
-        # the ints of the unit operations reach the last unit of the longest
-        # sample that evolution sees
-        self.units = int(lengths[samples].max())
+        # the ints of the unit operations come from the lengths of the samples
+        # that evolution sees, never from the test samples
+        self.seen_lengths = lengths[samples]
         # shuffled in case samples are sorted by class, where one fold could
         # hold most of a class. done once so every genome gets the same folds
         shuffled = np.random.default_rng(seed).permutation(samples)
@@ -101,7 +101,7 @@ class Evaluator:
             self.instructions,
             self.arity,
             unit_ops=self.unit_ops,
-            units=self.units,
+            seen_lengths=self.seen_lengths,
         )
 
     def encode(self, genome: Any) -> tuple[np.ndarray | None, int]:
