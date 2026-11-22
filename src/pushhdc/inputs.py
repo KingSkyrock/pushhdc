@@ -8,16 +8,20 @@ cuts its inputs into one part for each length.
 """
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
 from pushhdc.hypervector import HyperVector
 
-# samples of one length, which a program runs on together. the array says
-# where each of them goes in the output, and the hvs are their inputs, cut to
-# that length
-type SameLength = tuple[np.ndarray, list[HyperVector]]
+
+class SameLength(NamedTuple):
+    """samples of one length, which a program runs on together. `places` says
+    where each of them is in the `rows` that `by_length` cut them from, and
+    `inputs` are their inputs, cut to that length."""
+
+    places: np.ndarray
+    inputs: list[HyperVector]
 
 
 class Lookup:
@@ -96,16 +100,15 @@ def by_length(
     inputs: Sequence[np.ndarray | Lookup], lengths: np.ndarray, rows: np.ndarray
 ) -> list[SameLength]:
     """the samples in `rows` put together by length, with each of their inputs
-    cut to that length. an input that all samples share keeps its one row. the
-    array of each length says where its samples are in `rows`."""
+    cut to that length. an input that all samples share keeps its one row."""
     out = []
     for length in np.unique(lengths[rows]):
-        where = np.flatnonzero(lengths[rows] == length)
+        places = np.flatnonzero(lengths[rows] == length)
         cut = [
             batch[:, :length]
             if len(batch) == 1
-            else batch[rows[where], :length]
+            else batch[rows[places], :length]
             for batch in inputs
         ]
-        out.append((where, [HyperVector(batch) for batch in cut]))
+        out.append(SameLength(places, [HyperVector(batch) for batch in cut]))
     return out

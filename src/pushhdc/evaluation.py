@@ -148,9 +148,10 @@ class Evaluator:
         return {**self.__dict__, "_kernels": {}}
 
     # scoring, `encode`, `fingerprint` and `kernel` run programs the same way,
-    # just on different samples
+    # just on different samples. the hvs come back in the order of the rows
+    # that the groups were cut from
     def _run(
-        self, genome: Any, parts: list[SameLength]
+        self, genome: Any, groups: list[SameLength]
     ) -> tuple[np.ndarray | None, int]:
         signature = ProgramSignature(
             arity=self.arity, output_stacks=["hypervector"]
@@ -161,17 +162,16 @@ class Evaluator:
         recording, cost = record_ops(program, self.instructions)
         if recording is None:
             return None, cost
-        sums = []
-        for where, inputs in parts:
-            hvs = replay(recording, inputs).data.sum(axis=1)
+        sums = [
+            replay(recording, group.inputs).data.sum(axis=1) for group in groups
+        ]
+        count = sum(len(group.places) for group in groups)
+        hvs = np.empty((count, sums[0].shape[1]), sums[0].dtype)
+        for group, group_sums in zip(groups, sums, strict=True):
             # a program that only uses inputs shared by all samples gives one
-            # hv, which is then the hv of every sample
-            if len(hvs) < len(where):
-                hvs = np.repeat(hvs, len(where), axis=0)
-            sums.append(hvs)
-        # puts each hv back at the place of its sample
-        order = np.concatenate([where for where, _ in parts])
-        return np.concatenate(sums)[np.argsort(order)], cost
+            # hv for the group, which is then the hv of every sample in it
+            hvs[group.places] = group_sums
+        return hvs, cost
 
     def __call__(self, genome: Any) -> Fitness:
         hvs, cost = self._run(genome, self.seen_by_length)
