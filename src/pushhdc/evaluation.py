@@ -2,7 +2,7 @@
 
 import hashlib
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -14,11 +14,19 @@ from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
 from pushhdc.pyshgp.push.program import Program, ProgramSignature
 from pushhdc.recording import record_ops, replay
 
-# enough kernels for a few generations of a usual population
-_KEPT_KERNELS = 1024
+# the evaluator keeps the probe results of this many genomes, enough for a
+# few generations of a usual population
+_KEPT_PROBE_RESULTS = 1024
 
 # how many samples `fingerprint` and `kernel` run on
 _PROBE_COUNT = 64
+
+
+# what `Evaluator` keeps for each genome that it ran on the probe samples
+class _ProbeResult(NamedTuple):
+    fingerprint: bytes
+    cost: int
+    kernel: Kernel | None
 
 
 class Evaluator:
@@ -83,10 +91,7 @@ class Evaluator:
         self.probes_by_length = by_length(
             inputs, lengths, _probe_samples(shuffled, samples, lengths)
         )
-        # `evolve` asks for the fingerprint of each new genome, then for its
-        # kernel. both come from the same probe hvs, so `fingerprint` keeps
-        # the kernels of the latest genomes for `kernel` to read
-        self._kernels: dict[Any, Kernel | None] = {}
+        self._probe_results: dict[Any, _ProbeResult] = {}
         self.unit_ops = unit_ops
         self.instructions = encoder_instructions(unit_ops)
 
@@ -120,32 +125,38 @@ class Evaluator:
         samples the same way, and the program's cost. programs with the same
         fingerprint get the same accuracy, so `evolve` only scores one of
         them. programs that leave no hv all score 0, so they share an empty
-        fingerprint. it also keeps the kernel of the probe hvs for `kernel`."""
-        hvs, cost = self._run(genome, self.probes_by_length)
-        self._keep_kernel(genome, hvs)
-        if hvs is None:
-            return b"", cost
-        return hashlib.sha256(hvs.tobytes()).digest(), cost
+        fingerprint."""
+        result = self._probe(genome)
+        return result.fingerprint, result.cost
 
     def kernel(self, genome: Any) -> Kernel | None:
         """how alike the program makes each pair of probe samples, for
         `evolve` to tell programs apart by. none if the program tells no
         probes apart."""
-        if genome not in self._kernels:
-            hvs, _ = self._run(genome, self.probes_by_length)
-            self._keep_kernel(genome, hvs)
-        return self._kernels[genome]
+        return self._probe(genome).kernel
 
-    # keeps only the latest kernels, so that the memory they use stays small
-    def _keep_kernel(self, genome: Any, hvs: np.ndarray | None) -> None:
-        if genome not in self._kernels and len(self._kernels) >= _KEPT_KERNELS:
-            del self._kernels[next(iter(self._kernels))]
-        self._kernels[genome] = None if hvs is None else Kernel.of(hvs)
+    # `evolve` asks for the fingerprint and then the kernel of each new genome.
+    # both come from one run on the probe samples, so `_probe` keeps the
+    # results of the latest genomes, and drops the oldest so that the memory
+    # stays small
+    def _probe(self, genome: Any) -> _ProbeResult:
+        if genome not in self._probe_results:
+            hvs, cost = self._run(genome, self.probes_by_length)
+            if len(self._probe_results) >= _KEPT_PROBE_RESULTS:
+                del self._probe_results[next(iter(self._probe_results))]
+            self._probe_results[genome] = (
+                _ProbeResult(b"", cost, None)
+                if hvs is None
+                else _ProbeResult(
+                    hashlib.sha256(hvs.tobytes()).digest(), cost, Kernel.of(hvs)
+                )
+            )
+        return self._probe_results[genome]
 
-    # the kept kernels only help the process that made them. so a copy of the
-    # evaluator for a worker process leaves them out
+    # the kept probe results only help the process that made them. so a copy
+    # of the evaluator for a worker process leaves them out
     def __getstate__(self) -> dict[str, Any]:
-        return {**self.__dict__, "_kernels": {}}
+        return {**self.__dict__, "_probe_results": {}}
 
     # scoring, `encode`, `fingerprint` and `kernel` run programs the same way,
     # just on different samples. the hvs come back in the order of the rows
