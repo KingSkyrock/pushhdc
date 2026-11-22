@@ -13,7 +13,7 @@ from pushhdc.evolution import (
     choose,
     evolve,
 )
-from pushhdc.fitness import Evaluate, Fitness, Ranked
+from pushhdc.fitness import Evaluate, Fitness, Scored
 from pushhdc.pyshgp.gp.genome import GeneSpawner, Genome
 from pushhdc.pyshgp.push.atoms import InstructionMeta, Literal
 from pushhdc.pyshgp.push.instruction_set import InstructionSet
@@ -313,7 +313,7 @@ def test_finalists_keep_the_best_few_at_each_cost() -> None:
     same accuracy takes a place, or if a cost gets dropped because a cheaper
     genome beats it.
     """
-    best: dict[float, Ranked] = {}
+    best: dict[float, Scored] = {}
     _keep_best_at_each_cost(
         best,
         [

@@ -14,4 +14,4 @@ class Fitness:
 
 
 type Evaluate = Callable[[Any], Fitness]
-type Ranked = list[tuple[Any, Fitness]]
+type Scored = list[tuple[Any, Fitness]]

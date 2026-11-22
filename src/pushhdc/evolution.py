@@ -9,7 +9,7 @@ import numpy as np
 
 from pushhdc.clearing import Kernel, clear
 from pushhdc.dedup import deduplicated
-from pushhdc.fitness import Evaluate, Fitness, Ranked
+from pushhdc.fitness import Evaluate, Fitness, Scored
 from pushhdc.parallel import scoring
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.gp.variation import Alternation, get_variation_operator
@@ -23,7 +23,7 @@ class Result:
     best_genome: Any
     best_fitness: Fitness
     history: list[Fitness]
-    finalists: Ranked
+    finalists: Scored
 
 
 def evolve(
@@ -73,7 +73,7 @@ def evolve(
     umad = get_variation_operator("umad")
     alternation = Alternation()
 
-    def make_child(ranked: Ranked) -> Any:
+    def make_child(ranked: Scored) -> Any:
         parent = _tournament(ranked, tournament_size, rng)
         if rng.random() < crossover_rate:
             other = _tournament(ranked, tournament_size, rng)
@@ -138,7 +138,7 @@ def evolve(
 
 
 def choose(
-    finalists: Ranked,
+    finalists: Scored,
     evaluators: Iterable[Evaluate],
     *,
     mean_tolerance: float = 0.005,
@@ -184,9 +184,9 @@ class _Ranker:
         # worse but cheaper genomes walk accuracy down by more than the
         # tolerance
         self.best_accuracy = 0.0
-        self.best_at_each_cost: dict[float, Ranked] = {}
+        self.best_at_each_cost: dict[float, Scored] = {}
 
-    def rank(self, scored: Ranked) -> Ranked:
+    def rank(self, scored: Scored) -> Scored:
         accuracies = [fitness.accuracy for _, fitness in scored]
         self.best_accuracy = max(self.best_accuracy, *accuracies)
         _keep_best_at_each_cost(self.best_at_each_cost, scored)
@@ -203,11 +203,11 @@ class _Ranker:
 # finalist gets simplified before `choose` scores it, so the genome that
 # `choose` picks is the one it scored
 def _finalists(
-    best_at_each_cost: dict[float, Ranked],
+    best_at_each_cost: dict[float, Scored],
     min_accuracy: float,
     simplify: Callable[[Any, Fitness], tuple[Any, Fitness]],
-) -> Ranked:
-    finalists: dict[float, Ranked] = {}
+) -> Scored:
+    finalists: dict[float, Scored] = {}
     _keep_best_at_each_cost(
         finalists,
         [
@@ -227,7 +227,7 @@ def _finalists(
 # not enough, because one evaluator can put a genome behind a close genome
 # that is really worse. a genome with the same cost and accuracy as one in
 # `best` is often a copy of it, so it does not take a place
-def _keep_best_at_each_cost(best: dict[float, Ranked], scored: Ranked) -> None:
+def _keep_best_at_each_cost(best: dict[float, Scored], scored: Scored) -> None:
     for genome, fitness in scored:
         kept = best.setdefault(fitness.cost, [])
         if all(fitness.accuracy != other.accuracy for _, other in kept):
@@ -266,7 +266,7 @@ def _simplify(
 
 # sorts genomes best first, by accuracy and then cost. every accuracy of at
 # least `good_enough` counts as the same, so cost decides between those genomes
-def _rank(scored: Ranked, good_enough: float) -> Ranked:
+def _rank(scored: Scored, good_enough: float) -> Scored:
     def key(pair: tuple[Any, Fitness]) -> tuple[float, float]:
         return (-min(pair[1].accuracy, good_enough), pair[1].cost)
 
@@ -275,6 +275,6 @@ def _rank(scored: Ranked, good_enough: float) -> Ranked:
 
 # picks `size` random genomes and returns the best of them. `ranked` is sorted
 # best first, which makes the lowest picked index the winner
-def _tournament(ranked: Ranked, size: int, rng: np.random.Generator) -> Any:
+def _tournament(ranked: Scored, size: int, rng: np.random.Generator) -> Any:
     picks = rng.choice(len(ranked), size=min(size, len(ranked)), replace=False)
     return ranked[int(picks.min())][0]

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pushhdc.fitness import Ranked
+from pushhdc.fitness import Scored
 
 
 class Kernel:
@@ -67,8 +67,8 @@ class Kernel:
 
 
 def clear(
-    ranked: Ranked, kernels: list[Kernel | None], similarity: float
-) -> Ranked:
+    ranked: Scored, kernels: list[Kernel | None], similarity: float
+) -> Scored:
     """`ranked` with each genome that does the same thing as a better genome
     moved behind the genomes that do something new.
 
