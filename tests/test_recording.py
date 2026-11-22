@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from pushhdc.evaluation import Evaluator
+from pushhdc.encoder_ops import encoder_instructions, encoder_spawner
 from pushhdc.hypervector import HyperVector
 from pushhdc.push_hdc import hdc_instruction_set
 from pushhdc.pyshgp.gp.genome import Genome, genome_to_code
@@ -24,25 +24,11 @@ def program(genome: Any, arity: int) -> Program:
     return Program(code=genome_to_code(genome), signature=signature)
 
 
-# an evaluator that has every op, the unit ops and dup too, for tests that
-# only need its ops
-def evaluator(inputs: list[np.ndarray]) -> Evaluator:
-    count = len(inputs[0])
-    return Evaluator(
-        inputs,
-        np.zeros(count),
-        np.arange(count),
-        folds=2,
-        seed=0,
-        unit_ops=True,
-    )
-
-
 # Tests
 
 
 def test_replay_gives_the_same_hv_and_cost_as_a_full_run() -> None:
-    """random programs with every op of the evaluator, the unit ops and dup
+    """random programs with every op of an encoder, the unit ops and dup
     too, give the same hv and cost from a replay as from a full run.
 
     fails if a replay leaves out, repeats or reorders an op, gives an op the
@@ -53,14 +39,16 @@ def test_replay_gives_the_same_hv_and_cost_as_a_full_run() -> None:
         rng.choice([-1, 1], size=(4, 6, 32)),
         rng.choice([-1, 1], size=(1, 6, 32)),
     ]
-    ops = evaluator(inputs)
+    instructions = encoder_instructions(unit_ops=True)
     hvs = [HyperVector(batch) for batch in inputs]
-    spawner = ops.spawner()
+    spawner = encoder_spawner(
+        instructions, len(inputs), unit_ops=True, units=inputs[0].shape[1]
+    )
     for _ in range(200):
         genome = program(spawner.spawn_genome((10, 50), rng=rng), arity=2)
-        interpreter = PushInterpreter(ops.instructions)
+        interpreter = PushInterpreter(instructions)
         [full] = interpreter.run(genome, hvs)
-        output, cost = record(genome, ops.instructions)
+        output, cost = record(genome, instructions)
         assert cost == interpreter.cost
         if full is Token.no_stack_item:
             assert output is None
@@ -78,7 +66,7 @@ def test_replay_does_only_the_ops_that_lead_to_the_output() -> None:
     result the program does not use.
     """
     ones = np.ones((1, 1, 8))
-    instructions = evaluator([ones]).instructions
+    instructions = encoder_instructions(unit_ops=True)
     bind = instructions["hv_bind"].f
     calls = []
 
@@ -118,7 +106,7 @@ def test_replay_keeps_an_hv_only_until_its_last_read() -> None:
             Input(input_index=0),
             InstructionMeta(name="hv_bind", code_blocks=0),
         ]
-    instructions = evaluator([np.ones((4, 1, 8))]).instructions
+    instructions = encoder_instructions(unit_ops=True)
     output, _ = record(program(Genome(genes), arity=1), instructions)
     assert output is not None
     tracemalloc.start()

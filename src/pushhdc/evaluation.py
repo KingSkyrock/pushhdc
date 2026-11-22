@@ -7,14 +7,12 @@ from typing import Any
 import numpy as np
 
 from pushhdc.clearing import Kernel
+from pushhdc.encoder_ops import encoder_instructions, encoder_spawner
 from pushhdc.fitness import Fitness
 from pushhdc.inputs import Lookup, SameLength, by_length, checked_lengths
-from pushhdc.push_hdc import hdc_instruction_set
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
-from pushhdc.pyshgp.push.instruction_set import InstructionSet
 from pushhdc.pyshgp.push.program import Program, ProgramSignature
 from pushhdc.recording import record, replay
-from pushhdc.units import unit_instructions
 
 # enough kernels for a few generations of a usual population
 _KEPT_KERNELS = 1024
@@ -90,30 +88,15 @@ class Evaluator:
         # the kernels of the latest genomes for `kernel` to read
         self._kernels: dict[Any, Kernel | None] = {}
         self.unit_ops = unit_ops
-        self.instructions = _encoder_instructions(unit_ops)
+        self.instructions = encoder_instructions(unit_ops)
 
     def spawner(self) -> GeneSpawner:
         """makes random genes that match this evaluator's inputs and ops."""
-        if self.unit_ops:
-            # the unit operations use ints for the shift distance and for the
-            # ends of a range, and `hv_permute` uses the same ints. the ints
-            # reach from the first unit to the last, so a range can start at
-            # the first unit
-            units = self.units
-            return GeneSpawner(
-                n_inputs=self.arity,
-                instruction_set=self.instructions,
-                literals=[],
-                erc_generators=[lambda rng: int(rng.integers(0, units))],
-            )
-        # hv_permute takes its shift from the int stack. shifts add up when a
-        # program permutes again, so the smallest shift, the literal below,
-        # can reach any shift
-        return GeneSpawner(
-            n_inputs=self.arity,
-            instruction_set=self.instructions,
-            literals=[1],
-            erc_generators=[],
+        return encoder_spawner(
+            self.instructions,
+            self.arity,
+            unit_ops=self.unit_ops,
+            units=self.units,
         )
 
     def encode(self, genome: Any) -> tuple[np.ndarray | None, int]:
@@ -247,25 +230,3 @@ def _probe_samples(
     if lengths[longest] > lengths[probes].max():
         probes = np.append(probes[:-1], longest)
     return probes
-
-
-# ops that only move data, leave units out or copy an hv have no cost.
-# hardware does them with wiring and no arithmetic, and it can use the same hv
-# again in place of a copy
-_FREE_OPS = {"hv_permute", "hv_shift_units", "hv_keep_units", "hypervector_dup"}
-
-
-# the ops a program can use, with their costs. an encoder only needs the hv
-# ops, since similarity is the classifier's job. every op that does arithmetic
-# has the same cost
-def _encoder_instructions(unit_ops: bool) -> InstructionSet:
-    instructions = hdc_instruction_set(register_core=False)
-    instructions.unregister("hv_cosine_sim")
-    if unit_ops:
-        instructions.register_list(unit_instructions())
-        # a program can use one result more than one time, and does not have
-        # to make it again
-        instructions.register_core_by_name("hypervector_dup$")
-    for name, instruction in instructions.items():
-        instruction.cost = 0 if name in _FREE_OPS else 1
-    return instructions
