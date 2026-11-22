@@ -12,7 +12,7 @@ from pushhdc.fitness import Fitness
 from pushhdc.inputs import Lookup, SameLength, by_length, checked_lengths
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
 from pushhdc.pyshgp.push.program import Program, ProgramSignature
-from pushhdc.recording import record, replay
+from pushhdc.recording import record_ops, replay
 
 # enough kernels for a few generations of a usual population
 _KEPT_KERNELS = 1024
@@ -158,12 +158,12 @@ class Evaluator:
         program = Program(code=genome_to_code(genome), signature=signature)
         # every length does the same ops, so the interpreter runs one time and
         # numpy does the ops again on each length (see `pushhdc.recording`)
-        output, cost = record(program, self.instructions)
-        if output is None:
+        recording, cost = record_ops(program, self.instructions)
+        if recording is None:
             return None, cost
         sums = []
         for where, inputs in parts:
-            hvs = replay(output, inputs).data.sum(axis=1)
+            hvs = replay(recording, inputs).data.sum(axis=1)
             # a program that only uses inputs shared by all samples gives one
             # hv, which is then the hv of every sample
             if len(hvs) < len(where):

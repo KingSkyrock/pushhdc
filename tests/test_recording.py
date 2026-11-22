@@ -14,7 +14,7 @@ from pushhdc.pyshgp.push.atoms import Input, InstructionMeta
 from pushhdc.pyshgp.push.interpreter import PushInterpreter
 from pushhdc.pyshgp.push.program import Program, ProgramSignature
 from pushhdc.pyshgp.utils import Token
-from pushhdc.recording import record, replay
+from pushhdc.recording import record_ops, replay
 
 # Helpers
 
@@ -48,13 +48,13 @@ def test_replay_gives_the_same_hv_and_cost_as_a_full_run() -> None:
         genome = program(spawner.spawn_genome((10, 50), rng=rng), arity=2)
         interpreter = PushInterpreter(instructions)
         [full] = interpreter.run(genome, hvs)
-        output, cost = record(genome, instructions)
+        recording, cost = record_ops(genome, instructions)
         assert cost == interpreter.cost
         if full is Token.no_stack_item:
-            assert output is None
+            assert recording is None
         else:
-            assert output is not None
-            assert np.array_equal(replay(output, hvs).data, full.data)
+            assert recording is not None
+            assert np.array_equal(replay(recording, hvs).data, full.data)
 
 
 def test_replay_does_only_the_ops_that_lead_to_the_output() -> None:
@@ -85,9 +85,9 @@ def test_replay_does_only_the_ops_that_lead_to_the_output() -> None:
     # the second program leaves its input on top of the chain's result
     for genes, binds in ((chain, 12), ([*chain, Input(input_index=0)], 0)):
         calls.clear()
-        output, _ = record(program(Genome(genes), arity=1), instructions)
-        assert output is not None
-        replay(output, [HyperVector(ones)])
+        recording, _ = record_ops(program(Genome(genes), arity=1), instructions)
+        assert recording is not None
+        replay(recording, [HyperVector(ones)])
         assert len(calls) == binds
 
 
@@ -107,10 +107,10 @@ def test_replay_keeps_an_hv_only_until_its_last_read() -> None:
             InstructionMeta(name="hv_bind", code_blocks=0),
         ]
     instructions = encoder_instructions(unit_ops=True)
-    output, _ = record(program(Genome(genes), arity=1), instructions)
-    assert output is not None
+    recording, _ = record_ops(program(Genome(genes), arity=1), instructions)
+    assert recording is not None
     tracemalloc.start()
-    replay(output, [HyperVector(big)])
+    replay(recording, [HyperVector(big)])
     peak = tracemalloc.get_traced_memory()[1]
     tracemalloc.stop()
     # a bind can use a few hvs of memory for a short time. the chain makes
@@ -126,4 +126,4 @@ def test_an_op_that_gives_a_value_from_hvs_cannot_be_recorded() -> None:
     """
     instructions = hdc_instruction_set(register_core=False)
     with pytest.raises(ValueError, match="hv_cosine_sim"):
-        record(program(Genome([]), arity=0), instructions)
+        record_ops(program(Genome([]), arity=0), instructions)

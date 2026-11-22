@@ -22,7 +22,7 @@ from pushhdc.pyshgp.utils import Token
 
 class Step:
     """one op that the program did, with the function that does it and its
-    arguments. an argument is a `Recorded` hv or a value from another stack,
+    arguments. an argument is a `StandIn` hv or a value from another stack,
     for example an int. `reads` is how many times later steps and the output
     read its results."""
 
@@ -32,7 +32,7 @@ class Step:
         self.reads = 0
 
 
-class Recorded(HyperVector):
+class StandIn(HyperVector):
     """a stand-in hv. it is result number `index` of `step`, or input number
     `index` if `step` is none. it is a `HyperVector`, so the interpreter puts
     it on the hypervector stack."""
@@ -46,19 +46,19 @@ class Recording:
     """the steps that lead to the hv a program leaves, in the order that the
     program did them, and the stand-in of that hv."""
 
-    def __init__(self, steps: list[Step], output: Recorded) -> None:
+    def __init__(self, steps: list[Step], output: StandIn) -> None:
         self.steps = steps
         self.output = output
 
 
-def record(
+def record_ops(
     program: Program, instructions: InstructionSet
 ) -> tuple[Recording | None, int]:
     """the ops of `program` and the program's cost. none if the program
     leaves no hv."""
     steps: list[Step] = []
-    interpreter = PushInterpreter(_recording(instructions, steps))
-    inputs = [Recorded(None, i) for i in range(program.signature.arity)]
+    interpreter = PushInterpreter(_recording_instructions(instructions, steps))
+    inputs = [StandIn(None, i) for i in range(program.signature.arity)]
     [output] = interpreter.run(program, inputs)
     if output is Token.no_stack_item:
         return None, interpreter.cost
@@ -71,7 +71,7 @@ def record(
         if step is not None:
             step.reads += 1
             if step.reads == 1:
-                todo.extend(a for a in step.args if isinstance(a, Recorded))
+                todo.extend(a for a in step.args if isinstance(a, StandIn))
     used = [step for step in steps if step.reads > 0]
     return Recording(used, output), interpreter.cost
 
@@ -83,7 +83,7 @@ def replay(recording: Recording, inputs: list[HyperVector]) -> HyperVector:
     results: dict[int, tuple[HyperVector, ...]] = {}
     reads_left: dict[int, int] = {}
 
-    def read(hv: Recorded) -> HyperVector:
+    def read(hv: StandIn) -> HyperVector:
         if hv.step is None:
             return inputs[hv.index]
         key = id(hv.step)
@@ -96,7 +96,7 @@ def replay(recording: Recording, inputs: list[HyperVector]) -> HyperVector:
     # each step comes after the steps it reads, because the program did them
     # in this order
     for step in recording.steps:
-        args = [read(a) if isinstance(a, Recorded) else a for a in step.args]
+        args = [read(a) if isinstance(a, StandIn) else a for a in step.args]
         results[id(step)] = step.f(*args)
         reads_left[id(step)] = step.reads
     return read(recording.output)
@@ -104,14 +104,14 @@ def replay(recording: Recording, inputs: list[HyperVector]) -> HyperVector:
 
 # a copy of `instructions` where each op that takes an hv adds a step to
 # `steps` and gives stand-ins. it keeps each op that takes no hv as it is
-def _recording(
+def _recording_instructions(
     instructions: InstructionSet, steps: list[Step]
 ) -> InstructionSet:
     recording = InstructionSet(type_library=instructions.type_library)
     for name, instruction in instructions.items():
         takes = getattr(instruction, "input_stacks", [])
         recording[name] = (
-            _recorder(instruction, steps)
+            _recording_op(instruction, steps)
             if "hypervector" in takes
             else instruction
         )
@@ -122,7 +122,9 @@ def _recording(
 # the program does next, so it cannot be recorded. a recording also needs
 # each op that takes hvs to never choose what to do by their values. the hv
 # ops never do, so only the stacks get checked here
-def _recorder(instruction: Instruction, steps: list[Step]) -> SimpleInstruction:
+def _recording_op(
+    instruction: Instruction, steps: list[Step]
+) -> SimpleInstruction:
     gives = getattr(instruction, "output_stacks", [])
     if not isinstance(instruction, SimpleInstruction) or any(
         stack != "hypervector" for stack in gives
@@ -132,10 +134,10 @@ def _recorder(instruction: Instruction, steps: list[Step]) -> SimpleInstruction:
             "take hvs and give only hvs can be recorded"
         )
 
-    def record_step(*args: Any) -> tuple[Recorded, ...]:
+    def record_step(*args: Any) -> tuple[StandIn, ...]:
         step = Step(instruction.f, args)
         steps.append(step)
-        return tuple(Recorded(step, i) for i in range(len(gives)))
+        return tuple(StandIn(step, i) for i in range(len(gives)))
 
     return SimpleInstruction(
         instruction.name,
