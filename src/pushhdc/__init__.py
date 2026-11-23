@@ -1,8 +1,9 @@
 """PushHDC: evolving HDC encoders with PushGP.
 
 `evolve` searches for Push programs that encode samples as hvs, and `choose`
-picks one of the finalists that `evolve` gives back. The modules, from the
-hv up to the search:
+picks one of the finalists that `evolve` gives back. Then `tune_ints` tries
+other values for the ints of the program that `choose` picked. The modules,
+from the hv up to the search:
 
 - `hypervector` holds the hv type and its ops
 - `instructions`, `units` and `push_hdc` make the hv ops into Push
@@ -18,6 +19,7 @@ hv up to the search:
   that do something new ahead of copies of better programs
 - `parallel` scores many genomes at a time in worker processes
 - `evolution` holds `evolve` and `choose`
+- `tuning` holds `tune_ints`
 """
 
 from pushhdc.hypervector import HyperVector

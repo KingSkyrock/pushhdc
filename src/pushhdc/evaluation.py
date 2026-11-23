@@ -7,7 +7,11 @@ from typing import Any, NamedTuple
 import numpy as np
 
 from pushhdc.clearing import Kernel
-from pushhdc.encoder_ops import encoder_instructions, encoder_spawner
+from pushhdc.encoder_ops import (
+    encoder_instructions,
+    encoder_spawner,
+    largest_int,
+)
 from pushhdc.fitness import Fitness
 from pushhdc.inputs import Lookup, SameLength, by_length, checked_lengths
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
@@ -77,6 +81,8 @@ class Evaluator:
         # the ints of the unit operations come from the lengths of the samples
         # that evolution sees, never from the test samples
         self.seen_lengths = lengths[samples]
+        # the largest int that new genes get with `unit_ops`
+        self.largest_int = largest_int(self.seen_lengths)
         # shuffled in case samples are sorted by class, where one fold could
         # hold most of a class. done once so every genome gets the same folds
         shuffled = np.random.default_rng(seed).permutation(samples)

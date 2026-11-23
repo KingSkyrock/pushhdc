@@ -3,14 +3,15 @@
 Evolution scores programs with one set of random hvs, the codebook. A
 codebook makes each program look a little better or worse than it is, and
 evolution favors the programs that look better. So the finalists get scored
-again on new codebooks, and the chosen program gets reported on other
-codebooks that played no part in the choice. Only that report uses the test
-samples.
+again on new codebooks. With unit ops, the ints of the chosen program then get
+tried at other values on the same codebooks (see `pushhdc.tuning`). The
+program gets reported on other codebooks that played no part in the choice.
+Only that report uses the test samples.
 """
 
 import math
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 
 import numpy as np
 
@@ -18,6 +19,7 @@ from pushhdc.evaluation import Evaluator, centroid_accuracy
 from pushhdc.evolution import choose, evolve
 from pushhdc.inputs import Lookup
 from pushhdc.pyshgp.gp.genome import genome_to_code
+from pushhdc.tuning import tune_ints
 
 CHOICE_CODEBOOKS = range(200, 208)
 REPORT_CODEBOOKS = range(100, 105)
@@ -44,9 +46,11 @@ def evolve_and_report(
     lengths: Sequence[int] | None = None,
 ) -> None:
     """evolves an encoder on codebook `seed`, chooses one of its finalists on
-    new codebooks, and prints it with its cross-validated and test accuracy
-    on the report codebooks. `inputs` makes the inputs of all samples from
-    the hvs of one codebook. each `Evaluator` also gets `unit_ops` and
+    new codebooks, and with `unit_ops` tunes the ints of that finalist on the
+    same codebooks. then it prints the encoder with its cross-validated and
+    test accuracy on the report codebooks, and with `unit_ops` also the
+    accuracy from before the tuning. `inputs` makes the inputs of all samples
+    from the hvs of one codebook. each `Evaluator` also gets `unit_ops` and
     `lengths`."""
 
     # the number of a codebook also seeds its folds, because a program can
@@ -61,26 +65,47 @@ def evolve_and_report(
             lengths=lengths,
         )
 
-    evolution = evaluator(seed)
-    result = evolve(
-        evolution.spawner(),
-        evolution,
-        seed=seed,
-        workers=os.cpu_count() or 1,
-    )
-    genome, fitness = choose(
-        result.finalists,
-        (evaluator(codebook) for codebook in CHOICE_CODEBOOKS),
-    )
+    # `choose` and `tune_ints` score on the same new codebooks
+    def choice_evaluators() -> Iterator[Evaluator]:
+        return (evaluator(codebook) for codebook in CHOICE_CODEBOOKS)
 
-    cross_validated, tested = [], []
+    workers = os.cpu_count() or 1
+    evolution = evaluator(seed)
+    # tuning tries the same range of ints that new genes get in evolution
+    top = evolution.largest_int
+    result = evolve(evolution.spawner(), evolution, seed=seed, workers=workers)
+    # the evaluator of evolution can be big, and it is not used again
+    del evolution
+    chosen, fitness = choose(result.finalists, choice_evaluators())
+    # without unit ops the spawner draws no ints, so there is no range of
+    # ints to try
+    genome = chosen
+    if unit_ops:
+        genome, fitness = tune_ints(
+            chosen, choice_evaluators, top=top, workers=workers
+        )
+
+    # tuning can fix ints that evolution got wrong, and so hide a change in
+    # how well evolution searches. so the accuracy from before the tuning
+    # gets printed too
+    reported = [genome, chosen] if unit_ops else [genome]
+    cross_validated = np.zeros(len(reported))
+    tested = np.zeros(len(reported))
     for codebook in REPORT_CODEBOOKS:
         report = evaluator(codebook)
-        cross_validated.append(report(genome).accuracy)
-        hvs, _ = report.encode(genome)
-        assert hvs is not None
-        tested.append(centroid_accuracy(hvs, labels, train, test))
+        for i, each in enumerate(reported):
+            cross_validated[i] += report(each).accuracy
+            hvs, _ = report.encode(each)
+            assert hvs is not None
+            tested[i] += centroid_accuracy(hvs, labels, train, test)
+    cross_validated /= len(REPORT_CODEBOOKS)
+    tested /= len(REPORT_CODEBOOKS)
     print(genome_to_code(genome).pretty_str())
     print(f"cost {fitness.cost}, chosen from {len(result.finalists)} finalists")
-    print(f"cross-validated accuracy {np.mean(cross_validated):.3f}")
-    print(f"test accuracy {np.mean(tested):.3f}")
+    print(f"cross-validated accuracy {cross_validated[0]:.3f}")
+    print(f"test accuracy {tested[0]:.3f}")
+    if unit_ops:
+        print(
+            f"before tuning ints: cross-validated accuracy "
+            f"{cross_validated[1]:.3f}, test accuracy {tested[1]:.3f}"
+        )

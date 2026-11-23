@@ -137,11 +137,17 @@ def evolve(
     return Result(best_genome, best_fitness, history, finalists)
 
 
+# `choose` counts a finalist as good enough when its mean accuracy is at most
+# this far below the best mean. a gap that small over many evaluators is
+# likely noise
+MEAN_TOLERANCE = 0.005
+
+
 def choose(
     finalists: Scored,
     evaluators: Iterable[Evaluate],
     *,
-    mean_tolerance: float = 0.005,
+    mean_tolerance: float = MEAN_TOLERANCE,
 ) -> tuple[Any, Fitness]:
     """the cheapest finalist whose mean accuracy over `evaluators` is within
     `mean_tolerance` of the best mean, with that mean as its accuracy.
