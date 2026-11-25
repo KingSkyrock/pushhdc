@@ -50,7 +50,9 @@ class Evaluator:
 
     an input can also be a `Lookup`, one hv for each symbol and the symbol at
     each unit. then the padded array never gets made, and the scores are the
-    same as with it.
+    same as with it. the hvs of its units get made only while a program reads
+    them, so an evaluator with many such inputs stays small, also in worker
+    processes.
 
     `lengths` gives the number of units of each sample in `inputs`, the test
     samples too. sample i then has only its first `lengths[i]` units in each

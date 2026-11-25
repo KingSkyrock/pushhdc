@@ -2,7 +2,7 @@
 
 An input holds a hypervector for each unit of each sample, shaped (samples,
 units, dimension). It can be an array, or a `Lookup` that makes the hvs of the
-units only when the evaluator cuts it. Samples can have different numbers of
+units only while a program reads them. Samples can have different numbers of
 units. A program runs on the samples of one length together, so the evaluator
 cuts its inputs into one part for each length.
 """
@@ -18,10 +18,12 @@ from pushhdc.hypervector import HyperVector
 class SameLength(NamedTuple):
     """samples of one length, which a program runs on together. `places` says
     where each of them is in the `rows` that `by_length` cut them from, and
-    `inputs` are their inputs, cut to that length."""
+    `inputs` are their inputs, cut to that length. a `Lookup` stays a
+    `Lookup`, so the hvs of its units get made only while a program reads
+    them."""
 
     places: np.ndarray
-    inputs: list[HyperVector]
+    inputs: "list[HyperVector | Lookup]"
 
 
 class Lookup:
@@ -30,10 +32,12 @@ class Lookup:
 
     unit u of sample i is `hvs[symbols[i, u]]`. `hvs` has one row for each
     symbol, and `symbols` is shaped (samples, units), or (1, units) for an
-    input that every sample shares. the evaluator makes each unit's hv when it
-    cuts its inputs, and with `lengths` it makes only the units within each
-    length. the padded array holds a copy of a symbol's hv at each unit up to
-    the longest sample, so it can be much bigger than the hvs and symbols.
+    input that every sample shares. a cut of a `Lookup` is a `Lookup` too, and
+    the evaluator makes the hv of each unit only while a program reads the
+    input, so the evaluator and its copies in worker processes stay small.
+    with `lengths` it makes only the units within each length. the padded
+    array holds a copy of a symbol's hv at each unit up to the longest
+    sample, so it can be much bigger than the hvs and symbols.
     the symbols past each length are never read, but each must still pick
     an hv, for example 0.
     """
@@ -65,10 +69,14 @@ class Lookup:
     def __len__(self) -> int:
         return len(self.symbols)
 
-    # the evaluator reads an input in cuts of samples and units, so only the
-    # hvs of those units get made
-    def __getitem__(self, key: Any) -> np.ndarray:
-        return np.asarray(self.hvs[self.symbols[key]])
+    # the evaluator reads an input in cuts of samples and units. a cut keeps
+    # the same hvs and only the symbols of those units
+    def __getitem__(self, key: Any) -> "Lookup":
+        return Lookup(self.hvs, self.symbols[key])
+
+    def array(self) -> np.ndarray:
+        """the hv of each unit, shaped (samples, units, dimension)."""
+        return np.asarray(self.hvs[self.symbols])
 
 
 def checked_lengths(
@@ -110,5 +118,13 @@ def by_length(
             else batch[rows[places], :length]
             for batch in inputs
         ]
-        out.append(SameLength(places, [HyperVector(batch) for batch in cut]))
+        out.append(
+            SameLength(
+                places,
+                [
+                    batch if isinstance(batch, Lookup) else HyperVector(batch)
+                    for batch in cut
+                ],
+            )
+        )
     return out

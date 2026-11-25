@@ -9,10 +9,11 @@ the interpreter on each batch, and ops whose result does not get to the output
 are not done.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from pushhdc.hypervector import HyperVector
+from pushhdc.inputs import Lookup
 from pushhdc.pyshgp.push.instruction import Instruction, SimpleInstruction
 from pushhdc.pyshgp.push.instruction_set import InstructionSet
 from pushhdc.pyshgp.push.interpreter import PushInterpreter
@@ -76,7 +77,9 @@ def record_ops(
     return Recording(used, output), interpreter.cost
 
 
-def replay(recording: Recording, inputs: list[HyperVector]) -> HyperVector:
+def replay(
+    recording: Recording, inputs: Sequence[HyperVector | Lookup]
+) -> HyperVector:
     """the hv that the recorded program leaves for `inputs`."""
     # the results of each step are kept until the last read, so no hv stays
     # in memory longer than it must
@@ -85,7 +88,12 @@ def replay(recording: Recording, inputs: list[HyperVector]) -> HyperVector:
 
     def read(hv: StandIn) -> HyperVector:
         if hv.step is None:
-            return inputs[hv.index]
+            batch = inputs[hv.index]
+            # the hvs of a `Lookup` get made at each read, so they stay in
+            # memory only while the step that reads them needs them
+            if isinstance(batch, Lookup):
+                return HyperVector(batch.array())
+            return batch
         key = id(hv.step)
         value = results[key][hv.index]
         reads_left[key] -= 1

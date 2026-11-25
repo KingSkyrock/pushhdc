@@ -1,5 +1,6 @@
 """Tests for scoring Push programs as HDC encoders, on tiny made-up data."""
 
+import pickle
 from typing import Any
 
 import numpy as np
@@ -340,6 +341,20 @@ def test_lookup_rejects_symbols_below_zero() -> None:
     """
     with pytest.raises(ValueError, match="symbols must pick one of"):
         Lookup(np.ones((3, 4)), np.array([[0, -1]]))
+
+
+def test_a_lookup_input_keeps_the_evaluator_small() -> None:
+    """an evaluator holds the symbols of a `Lookup` input, not the hv of each
+    unit, so the copy that each worker process gets stays small.
+
+    fails if the evaluator makes the hvs of a `Lookup` when it cuts it.
+    """
+    rng = np.random.default_rng(0)
+    hvs = rng.choice(np.array([-1, 1], dtype=np.int8), size=(4, 1000))
+    symbols = rng.integers(0, 4, size=(200, 50)).astype(np.int8)
+    evaluator = encoder(Lookup(hvs, symbols))
+    # the hv of every unit takes ten times this many bytes
+    assert len(pickle.dumps(evaluator)) < 1_000_000
 
 
 def test_padding_does_not_change_fingerprints() -> None:
