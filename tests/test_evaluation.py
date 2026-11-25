@@ -108,6 +108,56 @@ def test_each_sample_is_scored_without_its_own_fold() -> None:
     assert evaluator(genome("input_0")).accuracy == pytest.approx(8 / 9)
 
 
+def test_folds_keep_the_samples_of_each_source_together() -> None:
+    """with `sources`, each sample is held out one time, and no source has
+    samples on both sides of a fold. fewer sources than folds raise an error.
+
+    fails if the samples of a source get split over folds, if a sample is
+    held out twice or never, or if the sources of test samples count.
+    """
+    # samples 0 and 1 are test. the sources are out of order
+    sources = np.random.default_rng(0).permutation(np.repeat(np.arange(8), 4))
+    samples = np.arange(2, 32)
+    inputs = [np.ones((32, 1, 4))]
+    evaluator = Evaluator(
+        inputs, np.zeros(32), samples, folds=3, seed=0, sources=sources
+    )
+    held_out = np.concatenate([held for _, held in evaluator.splits])
+    assert np.array_equal(np.sort(held_out), np.arange(len(samples)))
+    seen = sources[samples]
+    for train, held in evaluator.splits:
+        assert not set(seen[train]) & set(seen[held])
+    # 2 sources of the samples that evolution sees, and a third of test
+    with pytest.raises(ValueError, match="fewer than the 3 folds"):
+        Evaluator(
+            inputs,
+            np.zeros(32),
+            samples,
+            folds=3,
+            seed=0,
+            sources=np.r_[[9, 9], np.repeat([0, 1], 15)],
+        )
+
+
+def test_folds_without_sources_stay_as_before() -> None:
+    """without `sources`, the folds are parts of one shuffle of the samples
+    by the seed, as before `sources` came in. so a seed gives the same scores
+    as before.
+
+    fails if the folds draw other random numbers when there are no sources.
+    """
+    samples = np.arange(3, 20)
+    evaluator = Evaluator(
+        [np.ones((20, 1, 4))], np.zeros(20), samples, folds=3, seed=5
+    )
+    shuffled = np.random.default_rng(5).permutation(samples)
+    # the splits give places in `samples`, and sample s is in place s - 3
+    for (_, held), part in zip(
+        evaluator.splits, np.array_split(shuffled, 3), strict=True
+    ):
+        assert np.array_equal(held, part - 3)
+
+
 def test_samples_outside_evolution_get_encoded_but_not_scored() -> None:
     """samples that are not in `samples` do not count toward accuracy, and
     `encode` still gives them their own hvs.

@@ -12,6 +12,7 @@ Only that report uses the test samples.
 import math
 import os
 from collections.abc import Callable, Iterator, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -44,14 +45,15 @@ def evolve_and_report(
     seed: int,
     unit_ops: bool = False,
     lengths: Sequence[int] | None = None,
+    sources: Sequence[Any] | np.ndarray | None = None,
 ) -> None:
     """evolves an encoder on codebook `seed`, chooses one of its finalists on
     new codebooks, and with `unit_ops` tunes the ints of that finalist on the
     same codebooks. then it prints the encoder with its cross-validated and
     test accuracy on the report codebooks, and with `unit_ops` also the
     accuracy from before the tuning. `inputs` makes the inputs of all samples
-    from the hvs of one codebook. each `Evaluator` also gets `unit_ops` and
-    `lengths`."""
+    from the hvs of one codebook. each `Evaluator` also gets `unit_ops`,
+    `lengths` and `sources`."""
 
     # the number of a codebook also seeds its folds, because a program can
     # score high on one set of folds by chance, the same as on one codebook
@@ -63,6 +65,7 @@ def evolve_and_report(
             seed=codebook,
             unit_ops=unit_ops,
             lengths=lengths,
+            sources=sources,
         )
 
     # `choose` and `tune_ints` score on the same new codebooks

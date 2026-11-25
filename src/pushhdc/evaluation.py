@@ -65,6 +65,12 @@ class Evaluator:
     split. k-fold cross-validation scores each of the `folds` parts with
     prototypes built from the others, so every sample counts toward accuracy
     and none is judged by a prototype it helped build.
+
+    `sources` gives the source of each sample, the test samples too, for
+    example the person that it came from. each part then holds all the
+    samples of its sources. samples from one source are often more alike than
+    other samples, so with a source on both sides of a fold, a program that
+    tells sources apart would score too high.
     """
 
     def __init__(
@@ -77,6 +83,7 @@ class Evaluator:
         seed: int,
         unit_ops: bool = False,
         lengths: Sequence[int] | np.ndarray | None = None,
+        sources: Sequence[Any] | np.ndarray | None = None,
     ) -> None:
         self.arity = len(inputs)
         lengths = checked_lengths(inputs, lengths)
@@ -86,9 +93,16 @@ class Evaluator:
         # the largest int that new genes get with `unit_ops`
         self.largest_int = largest_int(self.seen_lengths)
         # shuffled in case samples are sorted by class, where one fold could
-        # hold most of a class. done once so every genome gets the same folds
-        shuffled = np.random.default_rng(seed).permutation(samples)
-        self.splits = _folds(samples, shuffled, folds, len(lengths))
+        # hold most of a class. done once so every genome gets the same folds.
+        # with `sources`, the folds come from a shuffle of the sources instead
+        rng = np.random.default_rng(seed)
+        shuffled = rng.permutation(samples)
+        held_out = (
+            np.array_split(shuffled, folds)
+            if sources is None
+            else _held_out_by_source(samples, sources, folds, len(lengths), rng)
+        )
+        self.splits = _folds(samples, held_out, len(lengths))
         self.seen_labels = labels[samples]
         # the other samples, for example test, only get encoded at the end. so
         # they are kept apart, and scoring does not run programs on them
@@ -225,16 +239,44 @@ def centroid_accuracy(
 
 
 # k-fold splits of `samples` for cross-validation, each a pair of train and
-# held-out samples. scoring runs programs on `samples` only and gets their hvs
-# in that order, so the splits give places in `samples`, not sample numbers
+# held-out samples, with one part of `parts` held out in each. scoring runs
+# programs on `samples` only and gets their hvs in that order, so the splits
+# give places in `samples`, not sample numbers
 def _folds(
-    samples: np.ndarray, shuffled: np.ndarray, folds: int, count: int
+    samples: np.ndarray, parts: list[np.ndarray], count: int
 ) -> list[tuple[np.ndarray, np.ndarray]]:
     place = np.empty(count, dtype=int)
     place[samples] = np.arange(len(samples))
     return [
         (place[np.setdiff1d(samples, held_out)], place[held_out])
-        for held_out in np.array_split(shuffled, folds)
+        for held_out in parts
+    ]
+
+
+# the held-out samples of each fold, so that all the samples of a source are
+# in one fold. the sources get shuffled, so each seed gives other folds
+def _held_out_by_source(
+    samples: np.ndarray,
+    sources: Sequence[Any] | np.ndarray,
+    folds: int,
+    count: int,
+    rng: np.random.Generator,
+) -> list[np.ndarray]:
+    sources = np.asarray(sources)
+    if sources.shape != (count,):
+        raise ValueError(
+            f"sources must give a source for each of the {count} samples in "
+            "the inputs"
+        )
+    seen = sources[samples]
+    shuffled = rng.permutation(np.unique(seen))
+    if len(shuffled) < folds:
+        raise ValueError(
+            f"the samples come from {len(shuffled)} sources, which is fewer "
+            f"than the {folds} folds"
+        )
+    return [
+        samples[np.isin(seen, part)] for part in np.array_split(shuffled, folds)
     ]
 
 
