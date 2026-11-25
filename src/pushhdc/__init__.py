@@ -11,6 +11,8 @@ from the hv up to the search:
 - `encoder_ops` gives the ops that an encoder can use and their costs, and
   makes random genes from them
 - `inputs` holds the inputs of an evaluator and cuts them by sample length
+- `levels` gives each number a level and each level an hv, so that inputs
+  can hold numbers
 - `recording` runs a program one time and replays its hv ops on each length
 - `evaluation` scores a program as an encoder, by cross-validated accuracy
   and cost
