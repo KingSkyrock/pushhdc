@@ -11,11 +11,11 @@ minutes for the full dimension x seed sweep.
 import sys
 
 import torch
-import torch.nn as nn
 import torchhd
 from dataset import N_CLASSES, N_FEATURES, load
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from torch import nn
 from torchhd import embeddings
 from torchhd.models import Centroid
 
@@ -40,9 +40,7 @@ class IdLevelEncoder(nn.Module):
     def __init__(self, dimension: int) -> None:
         super().__init__()
         self.id = embeddings.Random(N_FEATURES, dimension)
-        self.value = embeddings.Level(
-            NUM_LEVELS, dimension, low=-1.0, high=1.0
-        )
+        self.value = embeddings.Level(NUM_LEVELS, dimension, low=-1.0, high=1.0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         sample_hv = torchhd.bind(self.id.weight, self.value(x))
@@ -92,9 +90,8 @@ def main() -> None:
 
     print("test accuracy")
     # laying / standing / walking are common; majority is the bar to beat
-    majority = max(
-        (y_test_np == label).mean() for label in range(N_CLASSES)
-    )
+    most_common = int(torch.bincount(y_train).argmax())
+    majority = (y_test_np == most_common).mean()
     row("majority class", [float(majority)])
     models = {
         "logistic regression": LogisticRegression(max_iter=2000),
@@ -105,7 +102,10 @@ def main() -> None:
         model.fit(x_train_np, y_train_np)
         row(name, [float(model.score(x_test_np, y_test_np))])
 
-    print(f"\n{'torchhd, by dimension':32}" + "".join(f"{d:8}" for d in DIMENSIONS))
+    print(
+        f"\n{'torchhd, by dimension':32}"
+        + "".join(f"{d:8}" for d in DIMENSIONS)
+    )
     for name, encoder_cls, batch_size in ENCODERS:
         accuracies = []
         for dimension in DIMENSIONS:

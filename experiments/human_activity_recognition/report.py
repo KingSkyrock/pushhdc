@@ -10,7 +10,9 @@ from pathlib import Path
 
 import baselines
 
-RESULTS = Path(__file__).parents[2] / "results" / "human_activity_recognition.txt"
+RESULTS = (
+    Path(__file__).parents[2] / "results" / "human_activity_recognition.txt"
+)
 
 
 def main() -> None:

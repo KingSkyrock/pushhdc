@@ -1,8 +1,0 @@
-test accuracy
-majority class                     0.182
-logistic regression                0.961
-random forest                      0.925
-
-torchhd, by dimension               1024    4096   10000
-sinusoid                           0.852   0.858   0.861
-id_level                           0.804   0.841   0.840
