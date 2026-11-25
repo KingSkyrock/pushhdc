@@ -46,6 +46,7 @@ def evolve_and_report(
     unit_ops: bool = False,
     lengths: Sequence[int] | None = None,
     sources: Sequence[Any] | np.ndarray | None = None,
+    workers: int | None = None,
 ) -> None:
     """evolves an encoder on codebook `seed`, chooses one of its finalists on
     new codebooks, and with `unit_ops` tunes the ints of that finalist on the
@@ -53,7 +54,8 @@ def evolve_and_report(
     test accuracy on the report codebooks, and with `unit_ops` also the
     accuracy from before the tuning. `inputs` makes the inputs of all samples
     from the hvs of one codebook. each `Evaluator` also gets `unit_ops`,
-    `lengths` and `sources`."""
+    `lengths` and `sources`. scoring runs in `workers` processes, or in one
+    for each CPU."""
 
     # the number of a codebook also seeds its folds, because a program can
     # score high on one set of folds by chance, the same as on one codebook
@@ -72,7 +74,7 @@ def evolve_and_report(
     def choice_evaluators() -> Iterator[Evaluator]:
         return (evaluator(codebook) for codebook in CHOICE_CODEBOOKS)
 
-    workers = os.cpu_count() or 1
+    workers = workers or os.cpu_count() or 1
     evolution = evaluator(seed)
     # tuning tries the same range of ints that new genes get in evolution
     top = evolution.largest_int
