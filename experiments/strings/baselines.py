@@ -11,16 +11,18 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
-from datasets import ALPHABETS, LETTERS, LONGEST_K, load, padded, split
+from datasets import ALPHABETS, LONGEST_K, letter_hvs, load, padded
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
 
 from pushhdc.evaluation import centroid_accuracy
 
-# the string experiments share `nyshd.py`, which is in `experiments/`
+# the string experiments share `nyshd.py` and `protocol.py`, which are in
+# `experiments/`
 sys.path.append(str(Path(__file__).parents[1]))
 import nyshd
+from protocol import nyshd_split
 
 DIMENSIONS = (64, 256, 1024, 4096, 10000)
 SEEDS = range(5)
@@ -28,15 +30,6 @@ SEEDS = range(5)
 # in each dimension, so they encode a part of the strings at a time, with
 # about this many numbers in each part
 PART = 50_000_000
-
-
-# one random hv of -1s and 1s for each letter, and all zeros for no letter,
-# so padding adds nothing
-def letter_hvs(dimension: int, rng: np.random.Generator) -> np.ndarray:
-    hvs = rng.choice(
-        np.array([-1, 1], dtype=np.int8), (len(LETTERS), dimension)
-    )
-    return np.concatenate([hvs, np.zeros((1, dimension), dtype=np.int8)])
 
 
 # counts each letter, wherever it is
@@ -104,7 +97,7 @@ def in_parts(
 def main(name: str) -> None:
     strings, labels = load(name)
     # nothing here gets tuned, so a validation split is not needed
-    train, test = split(len(labels))
+    train, test = nyshd_split(len(labels))
 
     def row(label: str, accuracies: list[float]) -> None:
         print(f"{label:32}" + "".join(f"{a:8.3f}" for a in accuracies))

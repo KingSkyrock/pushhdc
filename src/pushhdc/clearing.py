@@ -12,12 +12,9 @@ unrelated, for example when one program has an extra permute.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 
-if TYPE_CHECKING:
-    from pushhdc.evolution import Ranked
+from pushhdc.fitness import Scored
 
 
 class Kernel:
@@ -70,8 +67,8 @@ class Kernel:
 
 
 def clear(
-    ranked: Ranked, kernels: list[Kernel | None], similarity: float
-) -> Ranked:
+    ranked: Scored, kernels: list[Kernel | None], similarity: float
+) -> Scored:
     """`ranked` with each genome that does the same thing as a better genome
     moved behind the genomes that do something new.
 

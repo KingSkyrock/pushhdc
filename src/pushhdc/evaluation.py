@@ -2,71 +2,35 @@
 
 import hashlib
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
 from pushhdc.clearing import Kernel
-from pushhdc.evolution import Fitness
-from pushhdc.hypervector import HyperVector
-from pushhdc.push_hdc import hdc_instruction_set
+from pushhdc.encoder_ops import (
+    encoder_instructions,
+    encoder_spawner,
+    largest_int,
+)
+from pushhdc.fitness import Fitness
+from pushhdc.inputs import Lookup, SameLength, by_length, checked_lengths
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
-from pushhdc.pyshgp.push.interpreter import PushInterpreter
 from pushhdc.pyshgp.push.program import Program, ProgramSignature
-from pushhdc.pyshgp.utils import Token
-from pushhdc.units import unit_instructions
+from pushhdc.recording import record_ops, replay
 
-# samples of one length, which a program runs on together. the array says
-# where each of them goes in the output, and the hvs are their inputs, cut to
-# that length
-type SameLength = tuple[np.ndarray, list[HyperVector]]
+# the evaluator keeps the probe results of this many genomes, enough for a
+# few generations of a usual population
+_KEPT_PROBE_RESULTS = 1024
+
+# how many samples `fingerprint` and `kernel` run on
+_PROBE_COUNT = 64
 
 
-class Lookup:
-    """an input given as one hv for each symbol and the symbol at each unit,
-    so nobody has to build the padded (samples, units, dimension) array.
-
-    unit u of sample i is `hvs[symbols[i, u]]`. `hvs` has one row for each
-    symbol, and `symbols` is shaped (samples, units), or (1, units) for an
-    input that every sample shares. the evaluator makes each unit's hv when it
-    cuts its inputs, and with `lengths` it makes only the units within each
-    length. the padded array holds a copy of a symbol's hv at each unit up to
-    the longest sample, so it can be much bigger than the hvs and symbols.
-    the symbols past each length are never read, but each must still pick
-    an hv, for example 0.
-    """
-
-    # `Evaluator` reads an input as it reads an array, by `ndim`, `shape`,
-    # `len` and cuts
-    ndim = 3
-
-    def __init__(self, hvs: np.ndarray, symbols: np.ndarray) -> None:
-        hvs, symbols = np.asarray(hvs), np.asarray(symbols)
-        if hvs.ndim != 2 or symbols.ndim != 2:
-            raise ValueError(
-                "hvs must have one row for each symbol, and symbols must be "
-                "shaped (samples, units)"
-            )
-        # numpy would take -1 as the last hv with no error
-        if not np.issubdtype(symbols.dtype, np.integer) or (
-            symbols.size > 0
-            and (symbols.min() < 0 or symbols.max() >= len(hvs))
-        ):
-            raise ValueError(
-                f"symbols must pick one of the {len(hvs)} hvs, so they must be "
-                f"whole numbers from 0 to {len(hvs) - 1}"
-            )
-        self.hvs = hvs
-        self.symbols = symbols
-        self.shape = (*symbols.shape, hvs.shape[1])
-
-    def __len__(self) -> int:
-        return len(self.symbols)
-
-    # the evaluator reads an input in cuts of samples and units, so only the
-    # hvs of those units get made
-    def __getitem__(self, key: Any) -> np.ndarray:
-        return np.asarray(self.hvs[self.symbols[key]])
+# what `Evaluator` keeps for each genome that it ran on the probe samples
+class _ProbeResult(NamedTuple):
+    fingerprint: bytes
+    cost: int
+    kernel: Kernel | None
 
 
 class Evaluator:
@@ -86,7 +50,9 @@ class Evaluator:
 
     an input can also be a `Lookup`, one hv for each symbol and the symbol at
     each unit. then the padded array never gets made, and the scores are the
-    same as with it.
+    same as with it. the hvs of its units get made only while a program reads
+    them, so an evaluator with many such inputs stays small, also in worker
+    processes.
 
     `lengths` gives the number of units of each sample in `inputs`, the test
     samples too. sample i then has only its first `lengths[i]` units in each
@@ -99,6 +65,12 @@ class Evaluator:
     split. k-fold cross-validation scores each of the `folds` parts with
     prototypes built from the others, so every sample counts toward accuracy
     and none is judged by a prototype it helped build.
+
+    `sources` gives the source of each sample, the test samples too, for
+    example the person that it came from. each part then holds all the
+    samples of its sources. samples from one source are often more alike than
+    other samples, so with a source on both sides of a fold, a program that
+    tells sources apart would score too high.
     """
 
     def __init__(
@@ -111,97 +83,64 @@ class Evaluator:
         seed: int,
         unit_ops: bool = False,
         lengths: Sequence[int] | np.ndarray | None = None,
+        sources: Sequence[Any] | np.ndarray | None = None,
     ) -> None:
-        if any(batch.ndim != 3 for batch in inputs):
-            raise ValueError(
-                "inputs must be shaped (samples, units, dimension)"
-            )
         self.arity = len(inputs)
-        self.labels = labels
-        count = max(len(batch) for batch in inputs)
-        units = inputs[0].shape[1]
-        lengths = (
-            np.full(count, units) if lengths is None else np.asarray(lengths)
-        )
-        if (
-            not np.issubdtype(lengths.dtype, np.integer)
-            or lengths.shape != (count,)
-            or lengths.min() < 0
-            or lengths.max() > units
-        ):
-            raise ValueError(
-                f"lengths must give each of the {count} samples in the inputs "
-                f"a whole number of units from 0 to {units}"
-            )
-        # the ints of the unit operations reach the last unit of the longest
-        # sample that evolution sees
-        self.units = int(lengths[samples].max())
+        lengths = checked_lengths(inputs, lengths)
+        # the ints of the unit operations come from the lengths of the samples
+        # that evolution sees, never from the test samples
+        self.seen_lengths = lengths[samples]
+        # the largest int that new genes get with `unit_ops`
+        self.largest_int = largest_int(self.seen_lengths)
         # shuffled in case samples are sorted by class, where one fold could
-        # hold most of a class. done once so every genome gets the same folds
-        shuffled = np.random.default_rng(seed).permutation(samples)
-        self.splits = [
-            (np.setdiff1d(samples, held_out), held_out)
-            for held_out in np.array_split(shuffled, folds)
-        ]
-        # a few samples for `fingerprint` and `kernel`, which makes them much
-        # cheaper than a full run. they include the longest sample, so they
-        # see every unit that evolution sees
-        probes = shuffled[:64]
-        longest = samples[np.argmax(lengths[samples])]
-        if lengths[longest] > lengths[probes].max():
-            probes = np.append(probes[:-1], longest)
-        self.by_length = _by_length(inputs, lengths, np.arange(count))
-        self.probes = _by_length(inputs, lengths, probes)
-        # an encoder only needs the hv ops, since similarity is the
-        # classifier's job
-        self.instructions = hdc_instruction_set(register_core=False)
-        self.instructions.unregister("hv_cosine_sim")
+        # hold most of a class. done once so every genome gets the same folds.
+        # with `sources`, the folds come from a shuffle of the sources instead
+        rng = np.random.default_rng(seed)
+        shuffled = rng.permutation(samples)
+        held_out = (
+            np.array_split(shuffled, folds)
+            if sources is None
+            else _held_out_by_source(samples, sources, folds, len(lengths), rng)
+        )
+        self.splits = _folds(samples, held_out, len(lengths))
+        self.seen_labels = labels[samples]
+        # the other samples, for example test, only get encoded at the end. so
+        # they are kept apart, and scoring does not run programs on them
+        self.seen_samples = samples
+        self.other_samples = np.setdiff1d(np.arange(len(lengths)), samples)
+        self.seen_by_length = by_length(inputs, lengths, samples)
+        self.other_by_length = by_length(inputs, lengths, self.other_samples)
+        self.probes_by_length = by_length(
+            inputs, lengths, _probe_samples(shuffled, samples, lengths)
+        )
+        self._probe_results: dict[Any, _ProbeResult] = {}
         self.unit_ops = unit_ops
-        if unit_ops:
-            self.instructions.register_list(unit_instructions())
-            # a program can use one result more than one time, and does not
-            # have to make it again
-            self.instructions.register_core_by_name("hypervector_dup$")
-        # every op that does arithmetic has the same cost
-        for instruction in self.instructions.values():
-            instruction.cost = 1
-        # ops that only move data or leave units out have no cost, because
-        # hardware does them with wiring and no arithmetic
-        self.instructions["hv_permute"].cost = 0
-        if unit_ops:
-            self.instructions["hv_shift_units"].cost = 0
-            self.instructions["hv_keep_units"].cost = 0
-            # a copy of an hv has no cost, because hardware can use the same hv
-            # again
-            self.instructions["hypervector_dup"].cost = 0
+        self.instructions = encoder_instructions(unit_ops)
 
     def spawner(self) -> GeneSpawner:
         """makes random genes that match this evaluator's inputs and ops."""
-        if self.unit_ops:
-            # the unit operations use ints for the shift distance and for the
-            # two ends of a range. `hv_permute` uses the same ints. the ints go
-            # from 0 to the last unit, so a range can start at the first unit
-            units = self.units
-            return GeneSpawner(
-                n_inputs=self.arity,
-                instruction_set=self.instructions,
-                literals=[],
-                erc_generators=[lambda rng: int(rng.integers(0, units))],
-            )
-        # hv_permute takes its shift from the int stack. permuting twice
-        # shifts by two, so 1 can reach any shift
-        return GeneSpawner(
-            n_inputs=self.arity,
-            instruction_set=self.instructions,
-            literals=[1],
-            erc_generators=[],
+        return encoder_spawner(
+            self.instructions,
+            self.arity,
+            unit_ops=self.unit_ops,
+            seen_lengths=self.seen_lengths,
         )
 
     def encode(self, genome: Any) -> tuple[np.ndarray | None, int]:
         """each sample's hv, shaped (samples, dimension), and the program's
         cost, for scoring other splits like test at the end. no hvs if the
         program leaves nothing on the hypervector stack."""
-        return self._run(genome, self.by_length)
+        seen, cost = self._run(genome, self.seen_by_length)
+        if seen is None:
+            return None, cost
+        count = len(self.seen_samples) + len(self.other_samples)
+        hvs = np.empty((count, *seen.shape[1:]), seen.dtype)
+        hvs[self.seen_samples] = seen
+        # a program that leaves an hv for some samples leaves one for all of
+        # them, because no op chooses what to do by the values of an hv
+        if len(self.other_samples):
+            hvs[self.other_samples], _ = self._run(genome, self.other_by_length)
+        return hvs, cost
 
     def fingerprint(self, genome: Any) -> tuple[bytes, int]:
         """a fingerprint that programs share when they encode a few probe
@@ -209,53 +148,71 @@ class Evaluator:
         fingerprint get the same accuracy, so `evolve` only scores one of
         them. programs that leave no hv all score 0, so they share an empty
         fingerprint."""
-        hvs, cost = self._run(genome, self.probes)
-        if hvs is None:
-            return b"", cost
-        return hashlib.sha256(hvs.tobytes()).digest(), cost
+        result = self._probe(genome)
+        return result.fingerprint, result.cost
 
     def kernel(self, genome: Any) -> Kernel | None:
         """how alike the program makes each pair of probe samples, for
         `evolve` to tell programs apart by. none if the program tells no
         probes apart."""
-        hvs, _ = self._run(genome, self.probes)
-        return None if hvs is None else Kernel.of(hvs)
+        return self._probe(genome).kernel
 
-    # `encode`, `fingerprint` and `kernel` run programs the same way, just on
-    # different samples
+    # `evolve` asks for the fingerprint and then the kernel of each new genome.
+    # both come from one run on the probe samples, so `_probe` keeps the
+    # results of the latest genomes, and drops the oldest so that the memory
+    # stays small
+    def _probe(self, genome: Any) -> _ProbeResult:
+        if genome not in self._probe_results:
+            hvs, cost = self._run(genome, self.probes_by_length)
+            if len(self._probe_results) >= _KEPT_PROBE_RESULTS:
+                del self._probe_results[next(iter(self._probe_results))]
+            self._probe_results[genome] = (
+                _ProbeResult(b"", cost, None)
+                if hvs is None
+                else _ProbeResult(
+                    hashlib.sha256(hvs.tobytes()).digest(), cost, Kernel.of(hvs)
+                )
+            )
+        return self._probe_results[genome]
+
+    # the kept probe results only help the process that made them. so a copy
+    # of the evaluator for a worker process leaves them out
+    def __getstate__(self) -> dict[str, Any]:
+        return {**self.__dict__, "_probe_results": {}}
+
+    # scoring, `encode`, `fingerprint` and `kernel` run programs the same way,
+    # just on different samples. the hvs come back in the order of the rows
+    # that the groups were cut from
     def _run(
-        self, genome: Any, by_length: list[SameLength]
+        self, genome: Any, groups: list[SameLength]
     ) -> tuple[np.ndarray | None, int]:
         signature = ProgramSignature(
             arity=self.arity, output_stacks=["hypervector"]
         )
         program = Program(code=genome_to_code(genome), signature=signature)
-        interpreter = PushInterpreter(self.instructions)
-        sums = []
-        for where, inputs in by_length:
-            [output] = interpreter.run(program, inputs)
-            # every length runs the same ops, because no op uses the values or
-            # the number of units of an hv to choose what to do. so every
-            # length gives the same cost, and all lengths or none leave an hv
-            if output is Token.no_stack_item:
-                return None, interpreter.cost
-            hvs = output.data.sum(axis=1)
+        # every length does the same ops, so the interpreter runs one time and
+        # numpy does the ops again on each length (see `pushhdc.recording`)
+        recording, cost = record_ops(program, self.instructions)
+        if recording is None:
+            return None, cost
+        sums = [
+            replay(recording, group.inputs).data.sum(axis=1) for group in groups
+        ]
+        count = sum(len(group.places) for group in groups)
+        hvs = np.empty((count, sums[0].shape[1]), sums[0].dtype)
+        for group, group_sums in zip(groups, sums, strict=True):
             # a program that only uses inputs shared by all samples gives one
-            # hv, which is then the hv of every sample
-            if len(hvs) < len(where):
-                hvs = np.repeat(hvs, len(where), axis=0)
-            sums.append(hvs)
-        # puts each hv back at the place of its sample
-        order = np.concatenate([where for where, _ in by_length])
-        return np.concatenate(sums)[np.argsort(order)], interpreter.cost
+            # hv for the group, which is then the hv of every sample in it
+            hvs[group.places] = group_sums
+        return hvs, cost
 
     def __call__(self, genome: Any) -> Fitness:
-        hvs, cost = self.encode(genome)
+        hvs, cost = self._run(genome, self.seen_by_length)
         # hvs that are all zero contain no information
         if hvs is None or not hvs.any():
             return Fitness(accuracy=0.0, cost=cost)
         accuracies = [
-            centroid_accuracy(hvs, self.labels, train, held_out)
+            centroid_accuracy(hvs, self.seen_labels, train, held_out)
             for train, held_out in self.splits
         ]
         # weighting by fold size gives the share of all samples guessed right
@@ -281,20 +238,56 @@ def centroid_accuracy(
     return float((guesses == labels[test]).mean())
 
 
-# puts the samples in `rows` that have the same length together, and cuts
-# each of their inputs to that length. an input that all samples share keeps
-# its one row. the array of each length says where its samples are in `rows`
-def _by_length(
-    inputs: Sequence[np.ndarray | Lookup], lengths: np.ndarray, rows: np.ndarray
-) -> list[SameLength]:
-    out = []
-    for length in np.unique(lengths[rows]):
-        where = np.flatnonzero(lengths[rows] == length)
-        cut = [
-            batch[:, :length]
-            if len(batch) == 1
-            else batch[rows[where], :length]
-            for batch in inputs
-        ]
-        out.append((where, [HyperVector(batch) for batch in cut]))
-    return out
+# k-fold splits of `samples` for cross-validation, each a pair of train and
+# held-out samples, with one part of `parts` held out in each. scoring runs
+# programs on `samples` only and gets their hvs in that order, so the splits
+# give places in `samples`, not sample numbers
+def _folds(
+    samples: np.ndarray, parts: list[np.ndarray], count: int
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    place = np.empty(count, dtype=int)
+    place[samples] = np.arange(len(samples))
+    return [
+        (place[np.setdiff1d(samples, held_out)], place[held_out])
+        for held_out in parts
+    ]
+
+
+# the held-out samples of each fold, so that all the samples of a source are
+# in one fold. the sources get shuffled, so each seed gives other folds
+def _held_out_by_source(
+    samples: np.ndarray,
+    sources: Sequence[Any] | np.ndarray,
+    folds: int,
+    count: int,
+    rng: np.random.Generator,
+) -> list[np.ndarray]:
+    sources = np.asarray(sources)
+    if sources.shape != (count,):
+        raise ValueError(
+            f"sources must give a source for each of the {count} samples in "
+            "the inputs"
+        )
+    seen = sources[samples]
+    shuffled = rng.permutation(np.unique(seen))
+    if len(shuffled) < folds:
+        raise ValueError(
+            f"the samples come from {len(shuffled)} sources, which is fewer "
+            f"than the {folds} folds"
+        )
+    return [
+        samples[np.isin(seen, part)] for part in np.array_split(shuffled, folds)
+    ]
+
+
+# a few samples for `fingerprint` and `kernel`, which makes them much cheaper
+# than a full run. they include the longest sample, so they see every unit
+# that evolution sees
+def _probe_samples(
+    shuffled: np.ndarray, samples: np.ndarray, lengths: np.ndarray
+) -> np.ndarray:
+    probes = shuffled[:_PROBE_COUNT]
+    longest = samples[np.argmax(lengths[samples])]
+    if lengths[longest] > lengths[probes].max():
+        probes = np.append(probes[:-1], longest)
+    return probes

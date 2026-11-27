@@ -34,6 +34,47 @@ def test_ops_clip_instead_of_wrapping() -> None:
     assert hv.bundle(hv).data.tolist() == [32, 127, -127]
 
 
+def test_ops_on_small_values_give_the_same_values_as_on_big_ones() -> None:
+    """bind and bundle give the clipped value for every pair of values, also
+    at the edge where int8 math starts to wrap around, and for an input that
+    all samples share.
+
+    fails if the ops use int8 math when a product or sum can pass the largest
+    int8 value, for example when the absolute value of -128 is found with int8
+    math, where it comes out as -128.
+    """
+    edges = [-128, -127, -64, -2, -1, 0, 1, 2, 63, 64, 127]
+    for x in edges:
+        for y in edges:
+            # shaped (samples, units, dimension), and `a` is shared
+            a = np.array([x, 1, -1], dtype=np.int8).reshape(1, 1, 3)
+            b = np.array([[y, -1, 1], [1, y, 0]], dtype=np.int8)[:, None]
+            wide = a.astype(np.int16)
+            bound = HyperVector(a).bind(HyperVector(b)).data
+            summed = HyperVector(a).bundle(HyperVector(b)).data
+            assert bound.tolist() == np.clip(wide * b, -127, 127).tolist()
+            assert summed.tolist() == np.clip(wide + b, -127, 127).tolist()
+
+
+def test_ops_leave_their_inputs_as_they_are() -> None:
+    """bind, bundle and permute give a new hv and do not change their inputs,
+    with small values and with values that must clip.
+
+    fails if an op changes an input in place. an hv uses an int8 array as it
+    is, with no copy, so that would also change the array it came from, for
+    example an input that the evaluator gives to every program.
+    """
+    for size in (1, 100):
+        a = np.array([size, -1, 1], dtype=np.int8)
+        b = np.array([-1, -size, 1], dtype=np.int8)
+        hv_a, hv_b = HyperVector(a), HyperVector(b)
+        hv_a.bind(hv_b)
+        hv_a.bundle(hv_b)
+        hv_a.permute(1)
+        assert a.tolist() == [size, -1, 1]
+        assert b.tolist() == [-1, -size, 1]
+
+
 def test_push_program_measures_similarity_of_bound_hv() -> None:
     """a Push program can bind hvs and push their cosine similarity.
 

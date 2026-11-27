@@ -1,12 +1,14 @@
 """Tests for scoring Push programs as HDC encoders, on tiny made-up data."""
 
+import pickle
 from typing import Any
 
 import numpy as np
 import pytest
 
-from pushhdc.evaluation import Evaluator, Lookup, centroid_accuracy
-from pushhdc.evolution import Fitness
+from pushhdc.evaluation import Evaluator, centroid_accuracy
+from pushhdc.fitness import Fitness
+from pushhdc.inputs import Lookup
 from pushhdc.pyshgp.gp.genome import Genome
 from pushhdc.pyshgp.push.atoms import Input, InstructionMeta, Literal
 from pushhdc.pyshgp.push.types import PushInt
@@ -106,6 +108,78 @@ def test_each_sample_is_scored_without_its_own_fold() -> None:
     assert evaluator(genome("input_0")).accuracy == pytest.approx(8 / 9)
 
 
+def test_folds_keep_the_samples_of_each_source_together() -> None:
+    """with `sources`, each sample is held out one time, and no source has
+    samples on both sides of a fold. fewer sources than folds raise an error.
+
+    fails if the samples of a source get split over folds, if a sample is
+    held out twice or never, or if the sources of test samples count.
+    """
+    # samples 0 and 1 are test. the sources are out of order
+    sources = np.random.default_rng(0).permutation(np.repeat(np.arange(8), 4))
+    samples = np.arange(2, 32)
+    inputs = [np.ones((32, 1, 4))]
+    evaluator = Evaluator(
+        inputs, np.zeros(32), samples, folds=3, seed=0, sources=sources
+    )
+    held_out = np.concatenate([held for _, held in evaluator.splits])
+    assert np.array_equal(np.sort(held_out), np.arange(len(samples)))
+    seen = sources[samples]
+    for train, held in evaluator.splits:
+        assert not set(seen[train]) & set(seen[held])
+    # 2 sources of the samples that evolution sees, and a third of test
+    with pytest.raises(ValueError, match="fewer than the 3 folds"):
+        Evaluator(
+            inputs,
+            np.zeros(32),
+            samples,
+            folds=3,
+            seed=0,
+            sources=np.r_[[9, 9], np.repeat([0, 1], 15)],
+        )
+
+
+def test_folds_without_sources_stay_as_before() -> None:
+    """without `sources`, the folds are parts of one shuffle of the samples
+    by the seed, as before `sources` came in. so a seed gives the same scores
+    as before.
+
+    fails if the folds draw other random numbers when there are no sources.
+    """
+    samples = np.arange(3, 20)
+    evaluator = Evaluator(
+        [np.ones((20, 1, 4))], np.zeros(20), samples, folds=3, seed=5
+    )
+    shuffled = np.random.default_rng(5).permutation(samples)
+    # the splits give places in `samples`, and sample s is in place s - 3
+    for (_, held), part in zip(
+        evaluator.splits, np.array_split(shuffled, 3), strict=True
+    ):
+        assert np.array_equal(held, part - 3)
+
+
+def test_samples_outside_evolution_get_encoded_but_not_scored() -> None:
+    """samples that are not in `samples` do not count toward accuracy, and
+    `encode` still gives them their own hvs.
+
+    fails if scoring reads labels or hvs by sample number where it has places
+    in `samples`, or if `encode` puts the other samples' hvs in the wrong
+    places.
+    """
+    classes = np.random.default_rng(0).choice([-1.0, 1.0], size=(3, 64))
+    # the same samples as the fold test above, after a few samples of
+    # another class that evolution does not see
+    labels = np.array([0, 0, 0, 5, 5, 5, 5, 7, 7, 7, 7, 9])
+    hvs = classes[[0, 1, 2, 0, 0, 0, 0, 1, 1, 1, 1, 2]]
+    evaluator = Evaluator(
+        [hvs[:, None, :]], labels, np.arange(3, 12), folds=3, seed=0
+    )
+    assert evaluator(genome("input_0")).accuracy == pytest.approx(8 / 9)
+    encoded, _ = evaluator.encode(genome("input_0"))
+    assert encoded is not None
+    assert np.array_equal(encoded, hvs)
+
+
 def test_program_with_no_output_scores_zero() -> None:
     """a program that leaves no hv scores 0 and still pays for its ops.
 
@@ -145,6 +219,29 @@ def test_fingerprint_matches_programs_that_encode_alike() -> None:
     other, _ = evaluator.fingerprint(genome("input_1"))
     assert plain == detour != other
     assert (plain_cost, detour_cost) == (0, 1)
+
+
+def test_each_genome_gets_its_own_kernel_after_fingerprints() -> None:
+    """after `fingerprint` runs on some genomes, `kernel` gives each of them
+    the same kernel as an evaluator that made no fingerprints.
+
+    fails if the kernels that `fingerprint` keeps for `kernel` get mixed up
+    between genomes.
+    """
+    a, b = np.random.default_rng(0).choice([-1.0, 1.0], size=(2, 8, 3, 16))
+    programs = [
+        genome("input_0"),
+        genome("input_1"),
+        genome("input_0", "input_1", "hv_bind"),
+    ]
+    evaluator = encoder(a, b)
+    for program in programs:
+        evaluator.fingerprint(program)
+    for program in programs:
+        kept, fresh = evaluator.kernel(program), encoder(a, b).kernel(program)
+        assert kept is not None
+        assert fresh is not None
+        assert kept.alignment(fresh) == pytest.approx(1)
 
 
 def test_shift_units_looks_ahead_and_fills_the_end_with_zeros() -> None:
@@ -296,6 +393,20 @@ def test_lookup_rejects_symbols_below_zero() -> None:
         Lookup(np.ones((3, 4)), np.array([[0, -1]]))
 
 
+def test_a_lookup_input_keeps_the_evaluator_small() -> None:
+    """an evaluator holds the symbols of a `Lookup` input, not the hv of each
+    unit, so the copy that each worker process gets stays small.
+
+    fails if the evaluator makes the hvs of a `Lookup` when it cuts it.
+    """
+    rng = np.random.default_rng(0)
+    hvs = rng.choice(np.array([-1, 1], dtype=np.int8), size=(4, 1000))
+    symbols = rng.integers(0, 4, size=(200, 50)).astype(np.int8)
+    evaluator = encoder(Lookup(hvs, symbols))
+    # the hv of every unit takes ten times this many bytes
+    assert len(pickle.dumps(evaluator)) < 1_000_000
+
+
 def test_padding_does_not_change_fingerprints() -> None:
     """the values past each sample's length do not change a fingerprint, and
     programs that encode the samples in different ways get different
@@ -335,3 +446,37 @@ def test_probes_see_the_longest_sample() -> None:
         lengths[place] = 8
         evaluator = encoder(a, unit_ops=True, lengths=lengths)
         assert evaluator.fingerprint(short)[0] != evaluator.fingerprint(long)[0]
+
+
+def test_ints_fit_short_samples_and_still_reach_the_longest() -> None:
+    """when most samples are much shorter than the longest, many new ints
+    fall inside a short sample, and many still reach the far end of the
+    longest sample.
+
+    fails if every int is drawn from 0 to the last unit, because then few
+    ints fit a short sample. fails if every int is a place in a sample,
+    because then few ints reach the far end. also fails if a place can be
+    one unit past the end of its sample, if the draw reads the lengths of
+    test samples, or if empty samples are not left out, because an empty
+    sample has no place to draw.
+    """
+    # evolution sees empty samples, samples of one unit and one long sample.
+    # the only place in a sample of one unit is 0. the test samples are all
+    # long, so a place in them is rarely 0
+    lengths = np.array([0] * 10 + [1] * 9 + [100] * 81)
+    evaluator = Evaluator(
+        [np.ones((len(lengths), 100, 1))],
+        np.zeros(len(lengths)),
+        np.arange(20),
+        seed=0,
+        unit_ops=True,
+        lengths=lengths,
+    )
+    draw = evaluator.spawner().erc_generators[0]
+    rng = np.random.default_rng(0)
+    ints = np.array([draw(rng) for _ in range(2000)])
+    # about half of the ints are 0, and about a quarter are in the far half
+    # of the long sample. each bug above makes one of these two shares much
+    # smaller
+    assert np.mean(ints == 0) > 0.3
+    assert np.mean(ints >= 50) > 0.15
