@@ -79,8 +79,8 @@ def test_push_program_measures_similarity_of_bound_hv() -> None:
     """a Push program can bind hvs and push their cosine similarity.
 
     binding `a` with `b` flips `a` wherever `b` is -1, so the result's cosine
-    with `a` is the mean of `b`. fails if `hv_cosine_sim` isn't normalized or
-    leaves nothing on the float stack, or if `hv_bind` doesn't multiply.
+    with `a` is the mean of `b`. fails if `hv_cosine_sim` is not normalized
+    or leaves nothing on the float stack, or if `hv_bind` does not multiply.
     """
     rng = np.random.default_rng(0)
     a = HyperVector.random(256, rng=rng)

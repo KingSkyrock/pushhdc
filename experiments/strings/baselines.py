@@ -1,6 +1,6 @@
 """Baselines for NysHD's datasets of strings with different lengths.
 
-Run with `uv run --with scikit-learn python experiments/strings/baselines.py
+Run with `uv run --with scikit-learn python -m experiments.strings.baselines
 protein`, or `sms` in place of `protein`. The NysHD row needs a clone of
 NysHD's code, see `experiments/nyshd.py`.
 """
@@ -8,21 +8,22 @@ NysHD's code, see `experiments/nyshd.py`.
 import sys
 from collections.abc import Callable
 from functools import partial
-from pathlib import Path
 
 import numpy as np
-from datasets import ALPHABETS, LONGEST_K, letter_hvs, load, padded
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
 
+from experiments import nyshd
+from experiments.protocol import nyshd_split
+from experiments.strings.datasets import (
+    ALPHABETS,
+    LONGEST_K,
+    letter_hvs,
+    load,
+    padded,
+)
 from pushhdc.evaluation import centroid_accuracy
-
-# the string experiments share `nyshd.py` and `protocol.py`, which are in
-# `experiments/`
-sys.path.append(str(Path(__file__).parents[1]))
-import nyshd
-from protocol import nyshd_split
 
 DIMENSIONS = (64, 256, 1024, 4096, 10000)
 SEEDS = range(5)

@@ -1,10 +1,10 @@
 """The inputs of an evaluator, and how they get cut for each sample length.
 
-An input holds a hypervector for each unit of each sample, shaped (samples,
-units, dimension). It can be an array, or a `Lookup` that makes the hvs of the
+An input holds an hv for each unit of each sample, shaped (samples, units,
+dimension), either as an array or as a `Lookup` that makes the hvs of the
 units only while a program reads them. Samples can have different numbers of
-units. A program runs on the samples of one length together, so the evaluator
-cuts its inputs into one part for each length.
+units, and a program runs on all the samples of one length together, so the
+evaluator cuts its inputs into one part for each length.
 """
 
 from collections.abc import Sequence
@@ -16,34 +16,34 @@ from pushhdc.hypervector import HyperVector
 
 
 class SameLength(NamedTuple):
-    """samples of one length, which a program runs on together. `places` says
-    where each of them is in the `rows` that `by_length` cut them from, and
-    `inputs` are their inputs, cut to that length. a `Lookup` stays a
-    `Lookup`, so the hvs of its units get made only while a program reads
-    them."""
+    """a group of samples that share one length, which a program runs on
+    together. `places` gives the place of each sample in the `rows` that
+    `by_length` got, and `inputs` holds their inputs cut to that length. a
+    `Lookup` stays a `Lookup`, so the hvs of its units get made only while a
+    program reads them."""
 
     places: np.ndarray
     inputs: "list[HyperVector | Lookup]"
 
 
 class Lookup:
-    """an input given as one hv for each symbol and the symbol at each unit,
-    so nobody has to build the padded (samples, units, dimension) array.
+    """an input given as one hv for each symbol and the symbol at each unit.
+    the padded (samples, units, dimension) array holds a copy of a symbol's hv
+    at every unit up to the longest sample, so it can be much bigger than the
+    hvs and symbols, and a `Lookup` never builds it.
 
     unit u of sample i is `hvs[symbols[i, u]]`. `hvs` has one row for each
     symbol, and `symbols` is shaped (samples, units), or (1, units) for an
     input that every sample shares. a cut of a `Lookup` is a `Lookup` too, and
     the evaluator makes the hv of each unit only while a program reads the
     input, so the evaluator and its copies in worker processes stay small.
-    with `lengths` it makes only the units within each length. the padded
-    array holds a copy of a symbol's hv at each unit up to the longest
-    sample, so it can be much bigger than the hvs and symbols.
-    the symbols past each length are never read, but each must still pick
-    an hv, for example 0.
+    with `lengths`, it makes only the units within each length. the symbols
+    past each length are never read, but each must still pick an hv, for
+    example 0.
     """
 
-    # the evaluator reads an input as it reads an array, by `ndim`, `shape`,
-    # `len` and cuts
+    # the evaluator reads an input the way it reads an array, through `ndim`,
+    # `shape`, `len` and cuts
     ndim = 3
 
     def __init__(self, hvs: np.ndarray, symbols: np.ndarray) -> None:

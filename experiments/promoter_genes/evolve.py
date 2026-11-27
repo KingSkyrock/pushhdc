@@ -1,21 +1,16 @@
 """Evolves an encoder for promoter gene sequences and reports its test accuracy.
 
-Run with `uv run python experiments/promoter_genes/evolve.py`.
+Run with `uv run python -m experiments.promoter_genes.evolve`.
 """
 
-import sys
-from pathlib import Path
-
 import numpy as np
-from dataset import load
 
-# every experiment shares `protocol.py`, which is in `experiments/`
-sys.path.append(str(Path(__file__).parents[1]))
-from protocol import evolve_and_report, nyshd_split
+from experiments.promoter_genes.dataset import NUCLEOTIDES, load
+from experiments.protocol import evolve_and_report, nyshd_split
 
 DIMENSION = 256
 SEED = 0
-NUM_NUCLEOTIDES = 4  # a, c, g, t
+NUM_NUCLEOTIDES = len(NUCLEOTIDES)
 
 
 def main() -> None:
@@ -38,8 +33,10 @@ def main() -> None:
         positions = rng.choice(hv, size=(sequences.shape[1], DIMENSION))
         return [values[sequences], positions[None]]
 
-    evolve_and_report(
-        inputs, is_promoter, train, test, seed=SEED, unit_ops=True
+    print(
+        evolve_and_report(
+            inputs, is_promoter, train, test, seed=SEED, unit_ops=True
+        )
     )
 
 

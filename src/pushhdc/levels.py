@@ -1,8 +1,9 @@
 """Hvs for numbers, so that an input can hold numbers as well as symbols.
 
-Each number gets one of a few levels, and each level has an hv. Near levels
-have alike hvs, so near numbers get alike hvs. The levels of an input are
-symbols for a `Lookup` (see `pushhdc.inputs`), with the level hvs as its hvs.
+Each number gets one of a few levels, and each level has an hv. Levels that
+are close together have alike hvs, so numbers that are close get alike hvs
+too. The levels of an input then serve as the symbols of a `Lookup` (see
+`pushhdc.inputs`), with the level hvs as its hvs.
 """
 
 import numpy as np
@@ -11,11 +12,11 @@ import numpy as np
 def level_hvs(
     count: int, dimension: int, rng: np.random.Generator
 ) -> np.ndarray:
-    """one hv of -1 and 1 for each of `count` levels, shaped (count,
-    dimension). the first and the last hv are random, so they are not alike.
-    each dimension changes from its value in the first hv to its value in the
-    last hv at a random level. so two levels are less alike the farther apart
-    they are, and the similarity falls in a straight line."""
+    """one hv of -1s and 1s for each of `count` levels, shaped (count,
+    dimension). the first and the last hv are random, so they are not alike,
+    and each dimension switches from its value in the first hv to its value
+    in the last hv at a random level. two levels are therefore less alike the
+    farther apart they are, and their similarity falls in a straight line."""
     if count < 2:
         raise ValueError("there must be 2 or more levels")
     first, last = rng.choice(np.array([-1, 1], dtype=np.int8), (2, dimension))

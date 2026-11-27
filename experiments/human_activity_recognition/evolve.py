@@ -1,20 +1,18 @@
 """Evolves an encoder for UCI HAR from the raw sensor signals, and reports its
 test accuracy.
 
-Run with `uv run python experiments/human_activity_recognition/evolve.py`.
+Run with `uv run python -m experiments.human_activity_recognition.evolve`.
 """
 
-import sys
-from pathlib import Path
-
 import numpy as np
-from signals import channel_hvs, load_signals, readings
 
+from experiments.human_activity_recognition.signals import (
+    channel_hvs,
+    load_signals,
+    readings,
+)
+from experiments.protocol import evolve_and_report
 from pushhdc.inputs import Lookup
-
-# every experiment shares `protocol.py`, which is in `experiments/`
-sys.path.append(str(Path(__file__).parents[1]))
-from protocol import evolve_and_report
 
 DIMENSION = 256
 SEED = 0
@@ -46,15 +44,17 @@ def main() -> None:
     # the windows overlap by half, and each person makes many windows. so
     # each fold holds all the windows of its people, and a program gets no
     # credit for telling people apart
-    evolve_and_report(
-        inputs,
-        labels,
-        train,
-        test,
-        seed=SEED,
-        unit_ops=True,
-        sources=people,
-        workers=WORKERS,
+    print(
+        evolve_and_report(
+            inputs,
+            labels,
+            train,
+            test,
+            seed=SEED,
+            unit_ops=True,
+            sources=people,
+            workers=WORKERS,
+        )
     )
 
 

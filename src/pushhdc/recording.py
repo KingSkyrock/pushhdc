@@ -1,15 +1,17 @@
 """Runs a Push program one time and replays its hv ops on many batches.
 
 The evaluator runs each program on many batches of samples, one batch for each
-length. The Push interpreter is slow for each step, and no op uses the values
-or the number of units of an hv to choose what to do. So the interpreter runs
-the program only one time, on stand-in hvs that record each op. Then numpy
-does the recorded ops on each batch. The result is the same as a full run of
-the interpreter on each batch, and ops whose result does not get to the output
-are not done.
+sample length, and stepping through the Push interpreter is slow. No op
+decides what to do from the values of an hv or from how many units it has, so
+the program takes the same steps on every batch. The interpreter therefore
+runs the program only once, on stand-in hvs that record each op, and numpy
+then repeats the recorded ops on every batch. The result is the same as a full
+run on each batch, except that ops whose result never reaches the output are
+skipped.
 """
 
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from pushhdc.hypervector import HyperVector
@@ -21,16 +23,19 @@ from pushhdc.pyshgp.push.program import Program
 from pushhdc.pyshgp.utils import Token
 
 
+# steps and recordings compare by identity, because a generated comparison
+# would compare their stand-in hvs, and a stand-in has no data to compare. a
+# step is also a key in `replay`, which needs a step to equal only itself
+@dataclass(eq=False)
 class Step:
     """one op that the program did, with the function that does it and its
     arguments. an argument is a `StandIn` hv or a value from another stack,
     for example an int. `reads` is how many times later steps and the output
     read its results."""
 
-    def __init__(self, f: Callable[..., Any], args: tuple[Any, ...]) -> None:
-        self.f = f
-        self.args = args
-        self.reads = 0
+    f: Callable[..., Any]
+    args: tuple[Any, ...]
+    reads: int = 0
 
 
 class StandIn(HyperVector):
@@ -43,20 +48,20 @@ class StandIn(HyperVector):
         self.index = index
 
 
+@dataclass(frozen=True, eq=False)
 class Recording:
     """the steps that lead to the hv a program leaves, in the order that the
     program did them, and the stand-in of that hv."""
 
-    def __init__(self, steps: list[Step], output: StandIn) -> None:
-        self.steps = steps
-        self.output = output
+    steps: list[Step]
+    output: StandIn
 
 
 def record_ops(
     program: Program, instructions: InstructionSet
 ) -> tuple[Recording | None, int]:
-    """the ops of `program` and the program's cost. none if the program
-    leaves no hv."""
+    """the ops of `program` and the program's cost. the recording is none
+    when the program leaves no hv."""
     steps: list[Step] = []
     interpreter = PushInterpreter(_recording_instructions(instructions, steps))
     inputs = [StandIn(None, i) for i in range(program.signature.arity)]
@@ -83,8 +88,8 @@ def replay(
     """the hv that the recorded program leaves for `inputs`."""
     # the results of each step are kept until the last read, so no hv stays
     # in memory longer than it must
-    results: dict[int, tuple[HyperVector, ...]] = {}
-    reads_left: dict[int, int] = {}
+    results: dict[Step, tuple[HyperVector, ...]] = {}
+    reads_left: dict[Step, int] = {}
 
     def read(hv: StandIn) -> HyperVector:
         if hv.step is None:
@@ -94,24 +99,25 @@ def replay(
             if isinstance(batch, Lookup):
                 return HyperVector(batch.array())
             return batch
-        key = id(hv.step)
-        value = results[key][hv.index]
-        reads_left[key] -= 1
-        if reads_left[key] == 0:
-            del results[key], reads_left[key]
+        step = hv.step
+        value = results[step][hv.index]
+        reads_left[step] -= 1
+        if reads_left[step] == 0:
+            del results[step], reads_left[step]
         return value
 
     # each step comes after the steps it reads, because the program did them
     # in this order
     for step in recording.steps:
         args = [read(a) if isinstance(a, StandIn) else a for a in step.args]
-        results[id(step)] = step.f(*args)
-        reads_left[id(step)] = step.reads
+        results[step] = step.f(*args)
+        reads_left[step] = step.reads
     return read(recording.output)
 
 
 # a copy of `instructions` where each op that takes an hv adds a step to
-# `steps` and gives stand-ins. it keeps each op that takes no hv as it is
+# `steps` and gives back stand-ins, while each op that takes no hv stays as
+# it is
 def _recording_instructions(
     instructions: InstructionSet, steps: list[Step]
 ) -> InstructionSet:

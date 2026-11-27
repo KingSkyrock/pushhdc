@@ -1,10 +1,12 @@
-"""The ops that an encoder program can use, what each op costs, and how
-evolution makes random genes from them."""
+"""The ops that an encoder program can use, what each op costs, how evolution
+makes random genes from them, and how a genome prints as a program."""
+
+from typing import Any
 
 import numpy as np
 
 from pushhdc.push_hdc import hdc_instruction_set
-from pushhdc.pyshgp.gp.genome import GeneSpawner
+from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
 from pushhdc.pyshgp.push.instruction_set import InstructionSet
 from pushhdc.units import unit_instructions
 
@@ -15,16 +17,16 @@ _FREE_OPS = {"hv_permute", "hv_shift_units", "hv_keep_units", "hypervector_dup"}
 
 
 def encoder_instructions(unit_ops: bool) -> InstructionSet:
-    """the ops a program can use, with their costs. an encoder only needs the
-    hv ops, since similarity is the classifier's job. every op that does
-    arithmetic has the same cost. with `unit_ops`, it adds the ops that
-    combine and keep units, and `hypervector_dup`."""
+    """the ops that an encoder program can use, with their costs. an encoder
+    only needs the hv ops, because measuring similarity is the classifier's
+    job, and every op that does arithmetic costs the same. with `unit_ops`,
+    it also gets the ops that combine and keep units, and `hypervector_dup`."""
     instructions = hdc_instruction_set(register_core=False)
     instructions.unregister("hv_cosine_sim")
     if unit_ops:
         instructions.register_list(unit_instructions())
-        # a program can use one result more than one time, and does not have
-        # to make it again
+        # lets a program use one result more than once without making it
+        # again
         instructions.register_core_by_name("hypervector_dup$")
     for name, instruction in instructions.items():
         instruction.cost = 0 if name in _FREE_OPS else 1
@@ -50,19 +52,20 @@ def encoder_spawner(
     `largest_int`. `seen_lengths` gives the number of units of each sample
     that evolution sees."""
     if unit_ops:
-        # the unit operations use ints for the shift distance and for the
-        # ends of a range, and `hv_permute` uses the same ints. half of the
-        # ints go from 0 to the last unit of the longest sample, so a program
-        # can reach the far end of long samples or find where samples end.
-        # the other half are places in random samples. then short shifts and
-        # ranges that fit in a typical sample are common, also when most
-        # samples are much shorter than the longest
+        # the unit ops read ints as shift distances and as the ends of a
+        # range, and `hv_permute` reads the same ints. half of the ints are
+        # drawn from 0 to the last unit of the longest sample, so that a
+        # program can reach the far end of long samples or find where samples
+        # end. the other half are drawn as a place inside a random sample, so
+        # that short shifts and ranges that fit a typical sample stay common
+        # even when most samples are much shorter than the longest
         largest = largest_int(seen_lengths)
         # an empty sample has no place, so it is left out
         nonempty = seen_lengths[seen_lengths > 0]
-        # when each sample is empty or as long as the longest, both halves
-        # draw from 0 to the last unit. then the draw does not choose a half.
-        # so a seed gives the same ints as plain draws from 0 to the last unit
+        # when every sample is either empty or as long as the longest, both
+        # halves would draw from the same range, so the draw skips the choice
+        # between them. that way a seed gives exactly the ints of a plain draw
+        # from 0 to the last unit
         one_length = bool((nonempty == largest + 1).all())
 
         def draw(rng: np.random.Generator) -> int:
@@ -76,12 +79,18 @@ def encoder_spawner(
             literals=[],
             erc_generators=[draw],
         )
-    # hv_permute takes its shift from the int stack. shifts add up when a
-    # program permutes again, so the smallest shift, the literal below,
-    # can reach any shift
+    # without unit ops, `hv_permute` is the only op that reads ints. a
+    # literal 1 is enough, because a program that permutes several times adds
+    # up its shifts and so can reach any shift
     return GeneSpawner(
         n_inputs=arity,
         instruction_set=instructions,
         literals=[1],
         erc_generators=[],
     )
+
+
+def program_text(genome: Any) -> str:
+    """the Push program of a genome as text, for example
+    `(input_0 2 hv_permute)`."""
+    return str(genome_to_code(genome).pretty_str())

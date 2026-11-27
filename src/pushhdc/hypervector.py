@@ -11,8 +11,8 @@ Architectural Strategy:
    pure integer addition without heavy hashing, random number generation,
    or binarization at every step.
 3. Final Boundary Resolution: Binarization and Seeded Tie-Breaking are
-   deferred strictly to the output boundary (when evaluating fitness or
-   storing vectors in memory).
+   deferred strictly to the output boundary, and happen only when a caller
+   asks for them. The evaluator scores the raw sums and never binarizes.
 """
 
 import hashlib
@@ -66,8 +66,9 @@ class HyperVector:
         """
         if data is not None:
             # Cast input data to int8 for memory efficiency (1 byte per dimension)
-            # an int8 array is used as it is, so an op does not copy its
-            # result again. a change to that array then changes the hv too
+            # an array that is int8 already is used as it is, so an op does
+            # not copy its result again. a change to that array then changes
+            # the hv too
             self.data: np.ndarray = data.astype(np.int8, copy=False)
             self.dimension: int = self.data.shape[-1]
         else:
@@ -164,7 +165,7 @@ class HyperVector:
             combined_bytes = self.data.tobytes()
             hash_digest = hashlib.sha256(combined_bytes).digest()
 
-            # Turn the first 8 bytes into a 32-bit integer seed
+            # Reduce the first 8 bytes to a 32-bit integer seed
             seed = int.from_bytes(hash_digest[:8], byteorder="big") % (2**32)
 
             # Initialize a localized, deterministic RNG using that content-derived seed
@@ -226,7 +227,7 @@ if __name__ == "__main__":
     accumulated_hv = bound_hv.bundle(hv3)  # Pure int8 addition
 
     # 2. Output Boundary: Binarize and tie-break only at the very end
-    final_hv = accumulated_hv.binarize()  # or accumulated_hv.binarize()
+    final_hv = accumulated_hv.binarize()
 
     # 3. Test Retrieval / Similarity
     logger.info(
