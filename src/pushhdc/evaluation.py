@@ -6,20 +6,20 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
-from pushhdc.clearing import Kernel
 from pushhdc.encoder_ops import (
     encoder_instructions,
     encoder_spawner,
     largest_int,
 )
-from pushhdc.fitness import Fitness
+from pushhdc.fitness import Fitness, Probe
 from pushhdc.inputs import Lookup, SameLength, by_length, checked_lengths
+from pushhdc.kernel import Kernel
 from pushhdc.pyshgp.gp.genome import GeneSpawner, genome_to_code
 from pushhdc.pyshgp.push.program import Program, ProgramSignature
 from pushhdc.recording import record_ops, replay
 
-# the evaluator keeps the probe results of this many genomes, enough for a
-# few generations of a usual population
+# the evaluator keeps the probe results of this many recent genomes, which
+# covers a few generations of a usual population
 _KEPT_PROBE_RESULTS = 1024
 
 # how many samples `fingerprint` and `kernel` run on
@@ -34,43 +34,45 @@ class _ProbeResult(NamedTuple):
 
 
 class Evaluator:
-    """scores a genome as an encoder, by cross-validated accuracy and cost.
+    """scores a genome as an hv encoder by its cross-validated accuracy and
+    its cost, which is what `evolve` ranks genomes by.
 
-    each input is a batch of hypervectors shaped (samples, units, dimension),
-    where a unit is one piece of a sample. a program does the same ops on each
-    unit, so a short program can encode every piece the same way. then the
-    units of each sample get bundled into one hv. with `unit_ops`, a program
-    can also combine each unit with a later unit, and keep only some units.
-    evolution then chooses how the units make groups. the units must be in
-    order, for example sequence positions.
+    each input is a batch of hvs shaped (samples, units, dimension), where a
+    unit is one piece of a sample, such as one position of a sequence. a
+    program applies the same ops to every unit, so even a short program
+    encodes every piece in the same way, and the evaluator then bundles the
+    units of each sample into a single hv. with `unit_ops`, a program can also
+    combine each unit with a later one and keep only some of the units, which
+    lets evolution decide how the units group together. this only makes sense
+    when the units are in order, as the positions of a sequence are.
+
+    `samples` are the samples that evolution may see, which is everything but
+    the test split. k-fold cross-validation scores each of the `folds` parts
+    with prototypes built from the other parts, so every sample counts toward
+    accuracy and none is judged by a prototype that it helped build.
+
+    `sources` gives the source of each sample, the test samples included, for
+    example the person that a recording came from. each part then holds all
+    the samples of its sources. samples from one source are often more alike
+    than other samples, so if a source had samples on both sides of a fold, a
+    program that tells sources apart would score too high.
 
     an input that is the same for every sample, for example the hv of each
-    position, can have 1 in place of the number of samples. it then uses less
-    memory and makes programs faster, and the scores do not change.
+    position, can have 1 in place of the number of samples. it then takes
+    less memory and makes programs faster, and the scores stay the same.
 
-    an input can also be a `Lookup`, one hv for each symbol and the symbol at
-    each unit. then the padded array never gets made, and the scores are the
-    same as with it. the hvs of its units get made only while a program reads
-    them, so an evaluator with many such inputs stays small, also in worker
-    processes.
+    an input can also be a `Lookup`, which holds one hv for each symbol and
+    the symbol at each unit. the padded array then never gets made, and the
+    scores are the same as with it. the hvs of the units are made only while a
+    program reads them, so an evaluator with many such inputs stays small,
+    also in worker processes.
 
     `lengths` gives the number of units of each sample in `inputs`, the test
-    samples too. sample i then has only its first `lengths[i]` units in each
-    input, the shared inputs too. the units after that are left out, so they
-    can hold any values, and a sample gets the same hv that it gets alone.
-    the program runs one time for each different length, so many different
-    lengths make scoring slower.
-
-    `samples` are the ones evolution may see, so everything but the test
-    split. k-fold cross-validation scores each of the `folds` parts with
-    prototypes built from the others, so every sample counts toward accuracy
-    and none is judged by a prototype it helped build.
-
-    `sources` gives the source of each sample, the test samples too, for
-    example the person that it came from. each part then holds all the
-    samples of its sources. samples from one source are often more alike than
-    other samples, so with a source on both sides of a fold, a program that
-    tells sources apart would score too high.
+    samples included. sample i then has only its first `lengths[i]` units in
+    each input, the shared inputs included. the units after that are left
+    out, so they can hold any values, and each sample gets the same hv that it
+    would get alone. the program runs one time for each different length, so
+    many different lengths make scoring slower.
     """
 
     def __init__(
@@ -92,9 +94,10 @@ class Evaluator:
         self.seen_lengths = lengths[samples]
         # the largest int that new genes get with `unit_ops`
         self.largest_int = largest_int(self.seen_lengths)
-        # shuffled in case samples are sorted by class, where one fold could
-        # hold most of a class. done once so every genome gets the same folds.
-        # with `sources`, the folds come from a shuffle of the sources instead
+        # the samples get shuffled in case they are sorted by class, which
+        # could put most of a class in one fold. this happens once, so every
+        # genome gets the same folds. with `sources`, the folds come from a
+        # shuffle of the sources instead
         rng = np.random.default_rng(seed)
         shuffled = rng.permutation(samples)
         held_out = (
@@ -104,8 +107,9 @@ class Evaluator:
         )
         self.splits = _folds(samples, held_out, len(lengths))
         self.seen_labels = labels[samples]
-        # the other samples, for example test, only get encoded at the end. so
-        # they are kept apart, and scoring does not run programs on them
+        # the samples outside `samples`, such as test, are only encoded at
+        # the end of a run, so they are grouped on their own and scoring never
+        # runs programs on them
         self.seen_samples = samples
         self.other_samples = np.setdiff1d(np.arange(len(lengths)), samples)
         self.seen_by_length = by_length(inputs, lengths, samples)
@@ -127,9 +131,11 @@ class Evaluator:
         )
 
     def encode(self, genome: Any) -> tuple[np.ndarray | None, int]:
-        """each sample's hv, shaped (samples, dimension), and the program's
-        cost, for scoring other splits like test at the end. no hvs if the
-        program leaves nothing on the hypervector stack."""
+        """encodes every sample, the ones outside `samples` included, and
+        gives back their hvs shaped (samples, dimension) with the program's
+        cost. it is meant for the end of a run, to score other splits such as
+        test. the hvs are none when the program leaves nothing on the
+        hypervector stack."""
         seen, cost = self._run(genome, self.seen_by_length)
         if seen is None:
             return None, cost
@@ -142,25 +148,25 @@ class Evaluator:
             hvs[self.other_samples], _ = self._run(genome, self.other_by_length)
         return hvs, cost
 
-    def fingerprint(self, genome: Any) -> tuple[bytes, int]:
-        """a fingerprint that programs share when they encode a few probe
-        samples the same way, and the program's cost. programs with the same
-        fingerprint get the same accuracy, so `evolve` only scores one of
-        them. programs that leave no hv all score 0, so they share an empty
-        fingerprint."""
+    def fingerprint(self, genome: Any) -> Probe:
+        """a fingerprint of how the program encodes a few probe samples, with
+        the program's cost. programs that encode the probes in the same way
+        share a fingerprint, and `evolve` runs only the first of them in full
+        and gives the others its accuracy. programs that leave no hv all
+        score 0, so they share an empty fingerprint."""
         result = self._probe(genome)
-        return result.fingerprint, result.cost
+        return Probe(result.fingerprint, result.cost)
 
     def kernel(self, genome: Any) -> Kernel | None:
-        """how alike the program makes each pair of probe samples, for
-        `evolve` to tell programs apart by. none if the program tells no
-        probes apart."""
+        """how alike the program makes each pair of probe samples, which
+        `evolve` uses to tell programs apart by what they do. it is none when
+        the program tells no probes apart."""
         return self._probe(genome).kernel
 
-    # `evolve` asks for the fingerprint and then the kernel of each new genome.
-    # both come from one run on the probe samples, so `_probe` keeps the
-    # results of the latest genomes, and drops the oldest so that the memory
-    # stays small
+    # `evolve` asks for the fingerprint and then the kernel of each new
+    # genome, and both come from the same run on the probe samples. so
+    # `_probe` keeps the results of the most recent genomes and drops the
+    # oldest ones, which keeps the memory small
     def _probe(self, genome: Any) -> _ProbeResult:
         if genome not in self._probe_results:
             hvs, cost = self._run(genome, self.probes_by_length)
@@ -175,14 +181,15 @@ class Evaluator:
             )
         return self._probe_results[genome]
 
-    # the kept probe results only help the process that made them. so a copy
-    # of the evaluator for a worker process leaves them out
+    # the kept probe results only help the process that made them, so the
+    # copy of the evaluator that a worker process gets leaves them out
     def __getstate__(self) -> dict[str, Any]:
         return {**self.__dict__, "_probe_results": {}}
 
-    # scoring, `encode`, `fingerprint` and `kernel` run programs the same way,
-    # just on different samples. the hvs come back in the order of the rows
-    # that the groups were cut from
+    # runs the program on each group of samples of one length and gives back
+    # one hv for each sample. scoring, `encode`, `fingerprint` and `kernel`
+    # all use it, each on its own samples, and the hvs come back in the order
+    # of the `rows` that `by_length` made the groups from
     def _run(
         self, genome: Any, groups: list[SameLength]
     ) -> tuple[np.ndarray | None, int]:
@@ -190,8 +197,9 @@ class Evaluator:
             arity=self.arity, output_stacks=["hypervector"]
         )
         program = Program(code=genome_to_code(genome), signature=signature)
-        # every length does the same ops, so the interpreter runs one time and
-        # numpy does the ops again on each length (see `pushhdc.recording`)
+        # every length does the same ops, so the interpreter runs the program
+        # once and numpy repeats its ops on each length (see
+        # `pushhdc.recording`)
         recording, cost = record_ops(program, self.instructions)
         if recording is None:
             return None, cost
@@ -230,8 +238,10 @@ def centroid_accuracy(
     prototypes = np.stack(
         [hvs[train][labels[train] == label].sum(axis=0) for label in classes]
     ).astype(float)
-    # a class whose train hvs are all zero has no direction. its prototype
-    # stays zero, so every sample is 0 similar to it
+    # only the prototypes get normalized, because the norm of a sample is the
+    # same against every class and so cannot change which class is most
+    # similar. a class whose train hvs are all zero has no direction, so its
+    # prototype stays zero and every sample is 0 similar to it
     norms = np.linalg.norm(prototypes, axis=1, keepdims=True)
     prototypes /= np.where(norms == 0, 1, norms)
     guesses = classes[(hvs[test] @ prototypes.T).argmax(axis=1)]
@@ -253,8 +263,9 @@ def _folds(
     ]
 
 
-# the held-out samples of each fold, so that all the samples of a source are
-# in one fold. the sources get shuffled, so each seed gives other folds
+# the held-out samples of each fold, with all the samples of a source in the
+# same fold. the sources get shuffled first, so each seed gives different
+# folds
 def _held_out_by_source(
     samples: np.ndarray,
     sources: Sequence[Any] | np.ndarray,

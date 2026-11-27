@@ -31,7 +31,7 @@ from scipy.sparse import csr_matrix, vstack
 
 from pushhdc.evaluation import centroid_accuracy
 
-type Kernel = Callable[[np.ndarray, np.ndarray], np.ndarray]
+type KernelFunction = Callable[[np.ndarray, np.ndarray], np.ndarray]
 # (k, g, apart). the gappy pair kernel counts pairs of k-mers up to g letters
 # apart, or k-mers alone when g is 0. with `apart`, a pair at one gap size is
 # a different feature from the same pair at another gap size
@@ -64,13 +64,13 @@ def settings(longest_k: int) -> list[Setting]:
 
 def kernels(
     strings: list[str], alphabet: int, menu: list[Setting]
-) -> dict[Setting, Kernel]:
+) -> dict[Setting, KernelFunction]:
     """NysHD's kernel for each setting on the menu, over sample numbers.
     `alphabet` is the `t` of their code, 0 for DNA, 2 for proteins and 3 for
     text."""
     space = _their_code()
     letters = len(space["alphabets"][alphabet])
-    out: dict[Setting, Kernel] = {}
+    out: dict[Setting, KernelFunction] = {}
     for k, g, apart in menu:
         width = letters ** (2 * k if g else k) * (g + 1 if g and apart else 1)
         size = max(1, PART // width)
@@ -101,7 +101,7 @@ def kernels(
 
 
 def encode(
-    kernel: Kernel,
+    kernel: KernelFunction,
     pool: np.ndarray,
     rows: np.ndarray,
     dimension: int,
@@ -120,7 +120,10 @@ def encode(
 
 
 def cross_validated(
-    kernel: Kernel, labels: np.ndarray, train: np.ndarray, dimension: int
+    kernel: KernelFunction,
+    labels: np.ndarray,
+    train: np.ndarray,
+    dimension: int,
 ) -> float:
     """mean accuracy over folds of `train`, with landmarks from the other
     folds. each fold uses the same seed for every kernel, so the kernels get
@@ -138,7 +141,9 @@ def cross_validated(
 
 
 def with_chosen_setting(
-    kernels: dict[Setting, Kernel], labels: np.ndarray, train: np.ndarray
+    kernels: dict[Setting, KernelFunction],
+    labels: np.ndarray,
+    train: np.ndarray,
 ) -> tuple[Encoder, Callable[[int], Setting]]:
     """the NysHD encoder, and the kernel setting that it uses at each
     dimension. the setting is the one with the best accuracy in

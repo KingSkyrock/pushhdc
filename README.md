@@ -10,6 +10,7 @@ uv run pytest -m "not slow"  # skip slow evolution tests
 uv run ruff check            # lint
 uv run ruff format           # format
 uv run mypy                  # type check
+uv run lint-imports          # check that modules keep to their layers
 uv build                     # build sdist + wheel into dist/
 ```
 
@@ -23,6 +24,7 @@ uv build                     # build sdist + wheel into dist/
 - `uv run ruff check`: Checks for lint issues, such as (bugs, unused imports).
 - `uv run ruff format` Checks the code follows style conventions.
 - `uv run mypy`: Use to check types in `src` and `tests` according to `pyproject.toml`.
+- `uv run lint-imports`: Checks that each module only imports the layers below it, as set in `pyproject.toml`.
 
 #### Pushing
 

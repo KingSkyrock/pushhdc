@@ -11,6 +11,10 @@ PATH = Path(__file__).parents[2] / "data" / "promoters" / "promoters.data"
 # Nucleotide mapping: 'a', 'c', 'g', 't' mapped to integers 0, 1, 2, 3
 NUCLEOTIDES = "acgt"
 
+# the number of nucleotides in each sequence, and of sequences in the dataset
+SEQUENCE_LENGTH = 57
+SEQUENCE_COUNT = 106
+
 
 def load() -> tuple[np.ndarray, np.ndarray]:
     """Loads all 106 promoter sequences and their binary labels (+ / -).
@@ -32,23 +36,26 @@ def load() -> tuple[np.ndarray, np.ndarray]:
         if len(parts) < 3:
             continue
         label = parts[0].strip()  # '+' or '-'
-        # parts[2] contains the 57-long nucleotide sequence, stripping whitespace/commas
-        seq_str = parts[2].strip().replace(",", "").lower()
+        # parts[2] contains the 57-long nucleotide sequence, stripping
+        # whitespace
+        seq_str = parts[2].strip().lower()
 
-        if len(seq_str) != 57:
+        if len(seq_str) != SEQUENCE_LENGTH:
             continue
 
         encoded_seq = [
             NUCLEOTIDES.index(n) for n in seq_str if n in NUCLEOTIDES
         ]
-        if len(encoded_seq) == 57:
+        if len(encoded_seq) == SEQUENCE_LENGTH:
             sequences.append(encoded_seq)
             is_promoter.append(label == "+")
 
     # NysHD's code keeps every line, and its split depends on the order, so a
     # skipped line would change which sequences are in test
-    if len(sequences) != 106:
-        raise ValueError(f"found {len(sequences)} sequences, not 106")
+    if len(sequences) != SEQUENCE_COUNT:
+        raise ValueError(
+            f"found {len(sequences)} sequences, not {SEQUENCE_COUNT}"
+        )
     return np.array(sequences, dtype=np.int64), np.array(
         is_promoter, dtype=bool
     )

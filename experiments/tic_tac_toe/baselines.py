@@ -1,13 +1,13 @@
 """Baselines for tic-tac-toe, to compare evolved encoders against.
 
-Run with `uv run --with scikit-learn python experiments/tic_tac_toe/baselines.py`.
+Run with `uv run --with scikit-learn python -m experiments.tic_tac_toe.baselines`.
 """
 
 import numpy as np
-from dataset import LINES, load, split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
+from experiments.tic_tac_toe.dataset import LINES, SPLIT_SEED, load, split
 from pushhdc.evaluation import centroid_accuracy
 
 DIMENSIONS = (64, 256, 1024, 4096, 10000)
@@ -83,7 +83,7 @@ def main() -> None:
     boards, x_won = load()
     # nothing here gets tuned, so validation joins train, the same as in
     # `evolve.py`
-    train, validation, test = split(x_won, seed=0)
+    train, validation, test = split(x_won, seed=SPLIT_SEED)
     train = np.concatenate([train, validation])
 
     def row(name: str, accuracies: list[float]) -> None:

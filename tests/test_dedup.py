@@ -1,7 +1,7 @@
 """Tests for scoring each distinct encoding once, using toy genomes."""
 
 from pushhdc.dedup import deduplicated
-from pushhdc.fitness import Fitness
+from pushhdc.fitness import Fitness, Probe
 
 # Helpers
 
@@ -21,8 +21,8 @@ class Runner:
 
 
 # genomes that start with the same letter share a fingerprint
-def by_first_letter(genome: str) -> tuple[bytes, float]:
-    return genome[0].encode(), len(genome)
+def by_first_letter(genome: str) -> Probe:
+    return Probe(genome[0].encode(), len(genome))
 
 
 # Tests

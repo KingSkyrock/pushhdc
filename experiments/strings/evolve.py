@@ -1,21 +1,17 @@
 """Evolves an encoder for one of NysHD's datasets of strings with different
 lengths, and reports its test accuracy.
 
-Run with `uv run python experiments/strings/evolve.py protein`, or `sms` in
+Run with `uv run python -m experiments.strings.evolve protein`, or `sms` in
 place of `protein`.
 """
 
 import sys
-from pathlib import Path
 
 import numpy as np
-from datasets import letter_hvs, load, padded
 
+from experiments.protocol import evolve_and_report, nyshd_split
+from experiments.strings.datasets import letter_hvs, load, padded
 from pushhdc.inputs import Lookup
-
-# every experiment shares `protocol.py`, which is in `experiments/`
-sys.path.append(str(Path(__file__).parents[1]))
-from protocol import evolve_and_report, nyshd_split
 
 DIMENSION = 256
 SEED = 0
@@ -42,8 +38,16 @@ def main(name: str) -> None:
         places = rng.choice(hv, size=(letters.shape[1], DIMENSION))
         return [Lookup(values, letters), places[None]]
 
-    evolve_and_report(
-        inputs, labels, train, test, seed=SEED, unit_ops=True, lengths=lengths
+    print(
+        evolve_and_report(
+            inputs,
+            labels,
+            train,
+            test,
+            seed=SEED,
+            unit_ops=True,
+            lengths=lengths,
+        )
     )
 
 

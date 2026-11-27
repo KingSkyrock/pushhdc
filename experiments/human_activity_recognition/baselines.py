@@ -1,7 +1,7 @@
 """Baselines for UCI HAR, to compare evolved encoders against.
 
 Run with
-`uv run --with torch-hd --with scikit-learn python experiments/human_activity_recognition/baselines.py`.
+`uv run --with torch-hd --with scikit-learn python -m experiments.human_activity_recognition.baselines`.
 
 First run downloads the UCI zip into `data/har/` (already done if that folder
 exists). TorchHD id-level at high dimensions is slow on CPU; expect tens of
@@ -12,12 +12,17 @@ import sys
 
 import torch
 import torchhd
-from dataset import N_CLASSES, N_FEATURES, load
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from torch import nn
 from torchhd import embeddings
 from torchhd.models import Centroid
+
+from experiments.human_activity_recognition.dataset import (
+    N_CLASSES,
+    N_FEATURES,
+    load,
+)
 
 DIMENSIONS = (1024, 4096, 10000)
 SEEDS = range(5)

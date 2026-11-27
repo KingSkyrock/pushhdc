@@ -9,8 +9,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from dataset import ROOT, load
 
+from experiments.human_activity_recognition.dataset import ROOT, load
 from pushhdc.levels import level_hvs, levels
 
 CHANNELS = tuple(

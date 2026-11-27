@@ -1,17 +1,12 @@
 """Evolves an encoder for tic-tac-toe boards and reports its test accuracy.
 
-Run with `uv run python experiments/tic_tac_toe/evolve.py`.
+Run with `uv run python -m experiments.tic_tac_toe.evolve`.
 """
 
-import sys
-from pathlib import Path
-
 import numpy as np
-from dataset import LINES, load, split
 
-# every experiment shares `protocol.py`, which is in `experiments/`
-sys.path.append(str(Path(__file__).parents[1]))
-from protocol import evolve_and_report
+from experiments.protocol import evolve_and_report
+from experiments.tic_tac_toe.dataset import LINES, SPLIT_SEED, load, split
 
 DIMENSION = 256
 SEED = 0
@@ -19,7 +14,7 @@ SEED = 0
 
 def main() -> None:
     boards, x_won = load()
-    train, validation, test = split(x_won, seed=SEED)
+    train, validation, test = split(x_won, seed=SPLIT_SEED)
     # cross-validation does the validation split's job, so evolution sees
     # both. test stays out until the end
     seen = np.concatenate([train, validation])
@@ -36,7 +31,7 @@ def main() -> None:
         squares = values[boards[:, LINES]]
         return [squares[:, :, i] for i in range(3)]
 
-    evolve_and_report(inputs, x_won, seen, test, seed=SEED)
+    print(evolve_and_report(inputs, x_won, seen, test, seed=SEED))
 
 
 if __name__ == "__main__":

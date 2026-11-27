@@ -1,26 +1,15 @@
 """Writes the baselines table to `results/human_activity_recognition.txt`.
 
 Run with
-`uv run --with torch-hd --with scikit-learn python experiments/human_activity_recognition/report.py`.
+`uv run --with torch-hd --with scikit-learn python -m experiments.human_activity_recognition.report`.
 """
 
-import io
-from contextlib import redirect_stdout
-from pathlib import Path
-
-import baselines
-
-RESULTS = (
-    Path(__file__).parents[2] / "results" / "human_activity_recognition.txt"
-)
+from experiments.human_activity_recognition import baselines
+from experiments.protocol import write_report
 
 
 def main() -> None:
-    with redirect_stdout(io.StringIO()) as table:
-        baselines.main()
-    RESULTS.parent.mkdir(exist_ok=True)
-    RESULTS.write_text(table.getvalue())
-    print(f"wrote {RESULTS}")
+    write_report("human_activity_recognition", baselines.main)
 
 
 if __name__ == "__main__":

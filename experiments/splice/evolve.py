@@ -1,17 +1,12 @@
 """Evolves an encoder for splice junctions and reports its test accuracy.
 
-Run with `uv run python experiments/splice/evolve.py`.
+Run with `uv run python -m experiments.splice.evolve`.
 """
 
-import sys
-from pathlib import Path
-
 import numpy as np
-from dataset import BASES, load
 
-# every experiment shares `protocol.py`, which is in `experiments/`
-sys.path.append(str(Path(__file__).parents[1]))
-from protocol import evolve_and_report, nyshd_split
+from experiments.protocol import evolve_and_report, nyshd_split
+from experiments.splice.dataset import BASES, load
 
 DIMENSION = 256
 SEED = 0
@@ -36,7 +31,9 @@ def main() -> None:
         positions = rng.choice(hv, size=(sequences.shape[1], DIMENSION))
         return [values[sequences], positions[None]]
 
-    evolve_and_report(inputs, labels, train, test, seed=SEED, unit_ops=True)
+    print(
+        evolve_and_report(inputs, labels, train, test, seed=SEED, unit_ops=True)
+    )
 
 
 if __name__ == "__main__":

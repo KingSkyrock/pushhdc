@@ -10,8 +10,9 @@ from pushhdc.fitness import Evaluate, Fitness
 _worker: dict[str, Evaluate] = {}
 
 
-# keeps a dataset inside `evaluate` from being sent with every genome. it runs
-# once as each worker process starts and hands it `evaluate`
+# runs once as each worker process starts and stores `evaluate` in that
+# worker, so that a dataset held inside `evaluate` gets copied to each worker
+# one time and not with every genome
 def _init_worker(evaluate: Evaluate) -> None:
     _worker["evaluate"] = evaluate
 

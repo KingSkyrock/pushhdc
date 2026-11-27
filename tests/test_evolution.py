@@ -7,17 +7,16 @@ import pytest
 
 from pushhdc.evolution import (
     Result,
-    _keep_best_at_each_cost,
+    _BestAtEachCost,
     _simplify,
     _tournament,
-    choose,
     evolve,
 )
-from pushhdc.fitness import Evaluate, Fitness, Scored
-from pushhdc.pyshgp.gp.genome import GeneSpawner, Genome
-from pushhdc.pyshgp.push.atoms import InstructionMeta, Literal
+from pushhdc.fitness import Evaluate, Fitness, Probe, ScoredGenome
+from pushhdc.pyshgp.gp.genome import GeneSpawner
+from pushhdc.pyshgp.push.atoms import InstructionMeta
 from pushhdc.pyshgp.push.instruction_set import InstructionSet
-from pushhdc.pyshgp.push.types import PushInt
+from tests.helpers import genome
 
 # Helpers
 
@@ -37,18 +36,6 @@ def accuracy_only(genome: Any) -> Fitness:
     return Fitness(accuracy=instruction_share(genome), cost=0)
 
 
-def cost_only(genome: Any) -> Fitness:
-    return Fitness(accuracy=1.0, cost=len(genome))
-
-
-# makes every genome tie on accuracy under a 0.02 tolerance, leaving cost to
-# pick the best. accuracy grows with length and crosses 0.99, so rounding to
-# steps of 0.02 would put long genomes ahead of cheap ones
-def nearly_tied(genome: Any) -> Fitness:
-    accuracy = 0.98 + min(len(genome), 15) / 1000
-    return Fitness(accuracy=accuracy, cost=len(genome))
-
-
 # lets a test look at everything the loop evaluated, by remembering each
 # genome's length and fitness. only works in a single process
 class Recorder:
@@ -60,87 +47,6 @@ class Recorder:
         fitness = self.evaluate(genome)
         self.seen.append((len(genome), fitness))
         return fitness
-
-
-# stands in for `Kernel`. genomes of the same length do the same thing
-class LengthAsKernel:
-    def __init__(self, length: int) -> None:
-        self.length = length
-
-    def alignment(self, other: "LengthAsKernel") -> float:
-        return float(self.length == other.length)
-
-
-# a toy evaluator with kernels, so that clearing can change the ranks
-class ToyWithKernels:
-    def __call__(self, genome: Any) -> Fitness:
-        return toy_fitness(genome)
-
-    def kernel(self, genome: Any) -> LengthAsKernel:
-        return LengthAsKernel(len(genome))
-
-
-# makes children always lose to their parents, leaving elitism as the only way
-# to keep the best. every genome scores worse than all the ones before it
-class WorseEachTime:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def __call__(self, genome: Any) -> Fitness:
-        self.calls += 1
-        return Fitness(accuracy=1 / self.calls, cost=0)
-
-
-# each genome scores 0.001 worse and costs 1 less than the one before, so new
-# genomes are always cheaper and close enough to tie with recent ones
-class CheaperButWorse:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def __call__(self, genome: Any) -> Fitness:
-        self.calls += 1
-        return Fitness(accuracy=1 - self.calls / 1000, cost=-self.calls)
-
-
-# scores like `toy_fitness` and counts the genomes it really scores. every
-# genome gets the same fingerprint, so only the first one needs scoring
-class OneFingerprint:
-    def __init__(self) -> None:
-        self.scored = 0
-
-    def __call__(self, genome: Any) -> Fitness:
-        self.scored += 1
-        return toy_fitness(genome)
-
-    def fingerprint(self, genome: Any) -> tuple[bytes, int]:
-        return b"same", len(genome)
-
-
-# a genome of int literals, for tests that only care which genes are left
-def numbers(*values: int) -> Any:
-    return Genome([Literal(value=v, push_type=PushInt) for v in values])
-
-
-# only the 7 matters for accuracy, and every gene costs 1
-def needs_seven(genome: Any) -> Fitness:
-    has_seven = any(gene.value == 7 for gene in genome)
-    return Fitness(accuracy=1.0 if has_seven else 0.5, cost=len(genome))
-
-
-# every genome is equally accurate, but shorter ones cost more
-def shorter_costs_more(genome: Any) -> Fitness:
-    return Fitness(accuracy=1.0, cost=-len(genome))
-
-
-# an evaluator that gives each named genome a set accuracy
-def scores(**accuracy: float) -> Evaluate:
-    return lambda genome: Fitness(accuracy=accuracy[genome], cost=0)
-
-
-# enough steps to finish simplifying these small genomes
-def simplified(genome: Any, evaluate: Evaluate) -> tuple[Any, Fitness]:
-    rng = np.random.default_rng(0)
-    return _simplify(genome, evaluate(genome), evaluate, 200, rng)
 
 
 # a small seeded run. each test passes only the settings it checks.
@@ -179,13 +85,97 @@ def run(
     )
 
 
+# makes children always lose to their parents, leaving elitism as the only way
+# to keep the best. every genome scores worse than all the ones before it
+class WorseEachTime:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self, genome: Any) -> Fitness:
+        self.calls += 1
+        return Fitness(accuracy=1 / self.calls, cost=0)
+
+
+def cost_only(genome: Any) -> Fitness:
+    return Fitness(accuracy=1.0, cost=len(genome))
+
+
+# all accuracies lie within 0.02 of each other, so under a 0.02 tolerance
+# every genome ties and cost alone picks the best. accuracy still grows with
+# length and crosses 0.99, so a ranking that rounded accuracy to steps of 0.02
+# would put long genomes ahead of cheap ones
+def nearly_tied(genome: Any) -> Fitness:
+    accuracy = 0.98 + min(len(genome), 15) / 1000
+    return Fitness(accuracy=accuracy, cost=len(genome))
+
+
+# each genome scores 0.001 worse and costs 1 less than the one before, so new
+# genomes are always cheaper and close enough to tie with recent ones
+class CheaperButWorse:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self, genome: Any) -> Fitness:
+        self.calls += 1
+        return Fitness(accuracy=1 - self.calls / 1000, cost=-self.calls)
+
+
+# enough steps to finish simplifying these small genomes
+def simplified(genome: Any, evaluate: Evaluate) -> ScoredGenome:
+    rng = np.random.default_rng(0)
+    return _simplify(ScoredGenome(genome, evaluate(genome)), evaluate, 200, rng)
+
+
+# only the 7 matters for accuracy, and every gene costs 1
+def needs_seven(genome: Any) -> Fitness:
+    has_seven = any(gene.value == 7 for gene in genome)
+    return Fitness(accuracy=1.0 if has_seven else 0.5, cost=len(genome))
+
+
+# every genome is equally accurate, but shorter ones cost more
+def shorter_costs_more(genome: Any) -> Fitness:
+    return Fitness(accuracy=1.0, cost=-len(genome))
+
+
+# scores like `toy_fitness` and counts the genomes it really scores. every
+# genome gets the same fingerprint, so only the first one needs scoring
+class OneFingerprint:
+    def __init__(self) -> None:
+        self.scored = 0
+
+    def __call__(self, genome: Any) -> Fitness:
+        self.scored += 1
+        return toy_fitness(genome)
+
+    def fingerprint(self, genome: Any) -> Probe:
+        return Probe(b"same", len(genome))
+
+
+# stands in for `Kernel`. genomes of the same length do the same thing
+class LengthAsKernel:
+    def __init__(self, length: int) -> None:
+        self.length = length
+
+    def alignment(self, other: "LengthAsKernel") -> float:
+        return float(self.length == other.length)
+
+
+# a toy evaluator with kernels, so that clearing can change the ranks
+class ToyWithKernels:
+    def __call__(self, genome: Any) -> Fitness:
+        return toy_fitness(genome)
+
+    def kernel(self, genome: Any) -> LengthAsKernel:
+        return LengthAsKernel(len(genome))
+
+
 # Tests
 
 
 def test_same_seed_gives_same_run_serial_and_parallel() -> None:
     """a seeded run gives the same result in one process or several.
 
-    fails if the seed doesn't drive every random choice, or if parallel
+    fails if the seed does not drive every random choice, or if parallel
     evaluation scores genomes differently from serial.
     """
     assert run(toy_fitness) == run(toy_fitness, workers=2)
@@ -204,7 +194,7 @@ def test_best_fitness_never_gets_worse() -> None:
 def test_no_genome_is_longer_than_the_max() -> None:
     """every genome the loop evaluates fits `max_genome_length`.
 
-    fails if children aren't cut to length after crossover and mutation,
+    fails if children are not cut to length after crossover and mutation,
     which lets genomes grow without bound.
     """
     recorder = Recorder(toy_fitness)
@@ -255,19 +245,22 @@ def test_tournament_over_everyone_picks_the_best() -> None:
     fails if selection picks the worse genome, which no other test catches
     because elitism still keeps the best.
     """
-    ranked = [("best", Fitness(1.0, 0)), ("worst", Fitness(0.0, 9))]
+    ranked = [
+        ScoredGenome("best", Fitness(1.0, 0)),
+        ScoredGenome("worst", Fitness(0.0, 9)),
+    ]
     rng = np.random.default_rng(0)
     assert _tournament(ranked, size=2, rng=rng) == "best"
 
 
-def test_simplify_deletes_only_genes_that_dont_matter() -> None:
+def test_simplify_deletes_only_genes_that_do_not_matter() -> None:
     """simplifying leaves just the genes that accuracy depends on.
 
     fails if a deletion that lowers accuracy gets kept, or if deletions that
     change nothing get thrown away.
     """
-    genome, fitness = simplified(numbers(*range(10)), needs_seven)
-    assert [gene.value for gene in genome] == [7]
+    simple, fitness = simplified(genome(*range(10)), needs_seven)
+    assert [gene.value for gene in simple] == [7]
     assert fitness == Fitness(accuracy=1.0, cost=1)
 
 
@@ -277,8 +270,8 @@ def test_simplify_never_raises_cost() -> None:
     fails if only accuracy gets checked, which could swap a program for a
     shorter but more expensive one.
     """
-    genome, _ = simplified(numbers(1, 2), shorter_costs_more)
-    assert len(genome) == 2
+    simple, _ = simplified(genome(1, 2), shorter_costs_more)
+    assert len(simple) == 2
 
 
 def test_evolve_returns_a_simplified_genome() -> None:
@@ -305,7 +298,7 @@ def test_evolve_scores_each_fingerprint_once() -> None:
     assert result.best_fitness == toy_fitness(result.best_genome)
 
 
-def test_finalists_keep_the_best_few_at_each_cost() -> None:
+def test_best_at_each_cost_keeps_the_most_accurate_without_copies() -> None:
     """the most accurate few genomes at each cost get kept, also at a cost
     where a cheaper genome is more accurate.
 
@@ -313,21 +306,21 @@ def test_finalists_keep_the_best_few_at_each_cost() -> None:
     same accuracy takes a place, or if a cost gets dropped because a cheaper
     genome beats it.
     """
-    best: dict[float, Scored] = {}
-    _keep_best_at_each_cost(
-        best,
+    best = _BestAtEachCost()
+    best.add(
         [
-            ("a", Fitness(0.8, 2)),
-            ("b", Fitness(0.9, 2)),
-            ("copy of b", Fitness(0.9, 2)),
-            ("c", Fitness(0.85, 2)),
-            ("d", Fitness(0.7, 3)),
-        ],
+            ScoredGenome("a", Fitness(0.8, 2)),
+            ScoredGenome("b", Fitness(0.9, 2)),
+            ScoredGenome("copy of b", Fitness(0.9, 2)),
+            ScoredGenome("c", Fitness(0.85, 2)),
+            ScoredGenome("d", Fitness(0.7, 3)),
+        ]
     )
-    assert best == {
-        2: [("b", Fitness(0.9, 2)), ("c", Fitness(0.85, 2))],
-        3: [("d", Fitness(0.7, 3))],
-    }
+    assert list(best) == [
+        ("b", Fitness(0.9, 2)),
+        ("c", Fitness(0.85, 2)),
+        ("d", Fitness(0.7, 3)),
+    ]
 
 
 def test_finalists_are_close_to_the_best() -> None:
@@ -355,35 +348,12 @@ def test_evolve_returns_simplified_finalists() -> None:
     assert all(len(genome) == 1 for genome, _ in finalists)
 
 
-def test_choose_takes_the_cheapest_close_to_the_best_mean() -> None:
-    """`choose` averages each finalist over all evaluators, then takes the
-    cheapest one within the tolerance of the best mean.
-
-    the cheap finalist is a little behind on the mean, but far behind with
-    the first evaluator. fails if `choose` trusts one evaluator, if it ignores
-    cost, or if it takes the cheapest finalist when it is too far behind.
-    """
-    finalists = [("cheap", Fitness(0.9, 2)), ("costly", Fitness(0.9, 3))]
-    evaluators = [
-        scores(cheap=0.88, costly=0.90),
-        scores(cheap=0.91, costly=0.90),
-    ]
-    assert choose(finalists, evaluators, mean_tolerance=0.006) == (
-        "cheap",
-        Fitness(0.895, 2),
-    )
-    assert choose(finalists, evaluators, mean_tolerance=0.004) == (
-        "costly",
-        Fitness(0.90, 3),
-    )
-
-
 def test_clearing_runs_only_when_it_is_on() -> None:
     """with kernels from `evaluate`, clearing changes the run, and
     `niche_similarity=None` turns it off.
 
-    fails if clearing does not change the ranks, or if none does not turn it
-    off.
+    fails if clearing does not change the ranks, or if
+    `niche_similarity=None` leaves clearing on.
     """
     on = run(ToyWithKernels(), niche_similarity=0.8)
     off = run(ToyWithKernels())

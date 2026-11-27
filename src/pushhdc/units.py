@@ -1,9 +1,11 @@
-"""Operations that let evolution choose how units make groups.
+"""Ops that let evolution decide how the units of a sample group together.
 
-The units must be in order, for example the positions of a sequence. A program
-can combine each unit with a unit that comes after it. A program can also keep
-only one part of the sequence. Evolution then chooses the n-gram length, the
-gaps and the region. A person does not have to choose them.
+With these ops, evolution picks the n-gram length, the gaps between the units
+in a group and the region that the encoder looks at, so a person does not have
+to. `hv_shift_units` lets a program combine each unit with the unit a set
+number of places after it, and `hv_keep_units` lets it keep one stretch of
+units and set the rest to zero. Both only make sense when the units are in
+order, as the positions of a sequence are.
 """
 
 import numpy as np
@@ -22,8 +24,10 @@ def _shift_units(hv: HyperVector, k: int) -> tuple[HyperVector]:
     return (HyperVector(data),)
 
 
-# the two ints can be in either order. Push gives the top int first, and it is
-# easy to use the wrong order. the range always contains one or more units
+# the ints can come in either order, because Push gives the top int first and
+# a program can easily push them the other way round. the range runs from the
+# smaller int to the larger one with both ends included, so it always holds
+# at least one unit
 def _keep_units(hv: HyperVector, a: int, b: int) -> tuple[HyperVector]:
     data = np.zeros_like(hv.data)
     low, high = min(a, b), max(a, b) + 1
@@ -32,7 +36,7 @@ def _keep_units(hv: HyperVector, a: int, b: int) -> tuple[HyperVector]:
 
 
 def unit_instructions() -> list[Instruction]:
-    """the operations for programs whose units are in order."""
+    """the ops for programs whose units are in order."""
     return [
         SimpleInstruction(
             "hv_shift_units",

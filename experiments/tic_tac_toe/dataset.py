@@ -18,6 +18,11 @@ LINES = np.array([
     [0, 4, 8], [2, 4, 6],
 ])  # fmt: skip
 
+# the seed of the train, validation and test split. `evolve.py` and
+# `baselines.py` both split with it, so they test on the same boards also
+# when the seed of the search changes
+SPLIT_SEED = 0
+
 
 def load() -> tuple[np.ndarray, np.ndarray]:
     """all 958 endgame boards and whether x won. squares are 0 for blank, 1 for

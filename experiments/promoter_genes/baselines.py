@@ -1,31 +1,25 @@
 """Baselines for promoter gene sequences, to compare evolved encoders against.
 
-Run with `uv run --with scikit-learn python experiments/promoter_genes/baselines.py`.
+Run with `uv run --with scikit-learn python -m experiments.promoter_genes.baselines`.
 The NysHD row needs a clone of NysHD's code in `nyshd/` at the top of this
 repo. Their code is at
 https://github.com/QuanlingZhao/AAAI-25-Bridging-the-Gap-Between-HDC-and-Kernel-Methods-via-the-Nystrom-Method
 """
 
-import sys
 from functools import partial
-from pathlib import Path
 
 import numpy as np
-from dataset import NUCLEOTIDES, load
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
+from experiments import nyshd
+from experiments.promoter_genes.dataset import NUCLEOTIDES, load
+from experiments.protocol import nyshd_split
 from pushhdc.evaluation import centroid_accuracy
-
-# the string experiments share `nyshd.py` and `protocol.py`, which are in
-# `experiments/`
-sys.path.append(str(Path(__file__).parents[1]))
-import nyshd
-from protocol import nyshd_split
 
 DIMENSIONS = (64, 256, 1024, 4096, 10000)
 SEEDS = range(5)
-NUM_NUCLEOTIDES = 4  # a, c, g, t
+NUM_NUCLEOTIDES = len(NUCLEOTIDES)
 
 
 def random_hvs(n: int, dimension: int, rng: np.random.Generator) -> np.ndarray:

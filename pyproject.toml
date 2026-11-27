@@ -17,6 +17,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.17",
     "mypy>=2.4.0",
     "pytest>=9",
     "ruff",
@@ -42,3 +43,66 @@ exclude = ["^src/pushhdc/pyshgp/", "^tests/pyshgp/"]
 [[tool.mypy.overrides]]
 module = ["pushhdc.pyshgp.*"]
 follow_imports = "skip"
+
+[tool.importlinter]
+root_package = "pushhdc"
+
+[[tool.importlinter.contracts]]
+name = "Layers, from the search and scoring down to the vendored pyshgp"
+type = "layers"
+containers = ["pushhdc"]
+layers = [
+    "choice | evolution | evaluation",
+    "clearing | dedup | parallel | encoder_ops",
+    "push_hdc | units | recording",
+    "instructions | inputs | levels",
+    "hypervector | fitness",
+    "kernel",
+    "pyshgp",
+]
+
+[[tool.importlinter.contracts]]
+name = "The search knows nothing about hvs or Push instructions"
+type = "forbidden"
+source_modules = [
+    "pushhdc.choice",
+    "pushhdc.evolution",
+    "pushhdc.clearing",
+    "pushhdc.dedup",
+    "pushhdc.parallel",
+    "pushhdc.fitness",
+    "pushhdc.kernel",
+]
+forbidden_modules = [
+    "pushhdc.evaluation",
+    "pushhdc.encoder_ops",
+    "pushhdc.push_hdc",
+    "pushhdc.units",
+    "pushhdc.recording",
+    "pushhdc.instructions",
+    "pushhdc.inputs",
+    "pushhdc.levels",
+    "pushhdc.hypervector",
+]
+
+[[tool.importlinter.contracts]]
+name = "Scoring knows nothing about the search"
+type = "forbidden"
+source_modules = [
+    "pushhdc.evaluation",
+    "pushhdc.encoder_ops",
+    "pushhdc.push_hdc",
+    "pushhdc.units",
+    "pushhdc.recording",
+    "pushhdc.instructions",
+    "pushhdc.inputs",
+    "pushhdc.levels",
+    "pushhdc.hypervector",
+]
+forbidden_modules = [
+    "pushhdc.choice",
+    "pushhdc.evolution",
+    "pushhdc.clearing",
+    "pushhdc.dedup",
+    "pushhdc.parallel",
+]

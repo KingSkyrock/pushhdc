@@ -2,21 +2,21 @@
 hvs and classifier as the evolved encoders.
 
 Run with
-`uv run python experiments/human_activity_recognition/signal_baselines.py`.
+`uv run python -m experiments.human_activity_recognition.signal_baselines`.
 """
 
 import sys
 from collections import defaultdict
-from pathlib import Path
 
 import numpy as np
-from signals import channel_hvs, load_signals, readings
 
+from experiments.human_activity_recognition.signals import (
+    channel_hvs,
+    load_signals,
+    readings,
+)
+from experiments.protocol import REPORT_CODEBOOKS
 from pushhdc.evaluation import centroid_accuracy
-
-# every experiment shares `protocol.py`, which is in `experiments/`
-sys.path.append(str(Path(__file__).parents[1]))
-from protocol import REPORT_CODEBOOKS
 
 DIMENSIONS = (256, 1024)
 # the n-grams below go up to runs of this many time steps
